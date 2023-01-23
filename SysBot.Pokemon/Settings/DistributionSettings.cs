@@ -15,6 +15,12 @@ namespace SysBot.Pokemon
         [Category(Distribute), Description("When enabled, idle LinkTrade bots will randomly distribute PKM files from the DistributeFolder.")]
         public bool DistributeWhileIdle { get; set; } = true;
 
+        [Category(Distribute), Description("When enabled, idle LinkTrade bots will randomly clone PKM files from other trainers.")]
+        public bool CloneWhileIdle { get; set; } = false;
+
+        [Category(Distribute), Description("Number of trades a user is allowed to perform per encounter for idle modes.")]
+        public int TradesPerEncounter { get; set; } = 1;
+
         [Category(Distribute), Description("When enabled, the DistributionFolder will yield randomly rather than in the same sequence.")]
         public bool Shuffled { get; set; }
 

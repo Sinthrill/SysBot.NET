@@ -36,7 +36,7 @@ namespace SysBot.Pokemon
         public bool DumpTradeLegalityCheck { get; set; } = true;
 
         [Category(TradeConfig), Description("When enabled, the screen will be turned off during normal bot loop operation to save power.")]
-        public bool ScreenOff { get; set; } = false;
+        public bool ScreenOff { get; set; }
 
         /// <summary>
         /// Gets a random trade code based on the range settings.
@@ -49,6 +49,11 @@ namespace SysBot.Pokemon
         private int _completedSeedChecks;
         private int _completedClones;
         private int _completedDumps;
+        private int _completedTeraSwaps;
+        private int _completedBallSwaps;
+        private int _completedDoubleSwaps;
+        private int _completedItemSwaps;
+        private int _completedEVSwaps;
 
         [Category(Counts), Description("Completed Surprise Trades")]
         public int CompletedSurprise
@@ -92,6 +97,41 @@ namespace SysBot.Pokemon
             set => _completedDumps = value;
         }
 
+        [Category(Counts), Description("Completed Tera Swap Trades")]
+        public int CompletedTeraSwaps
+        {
+            get => _completedTeraSwaps;
+            set => _completedTeraSwaps = value;
+        }
+
+        [Category(Counts), Description("Completed Ball Swap Trades")]
+        public int CompletedBallSwaps
+        {
+            get => _completedBallSwaps;
+            set => _completedBallSwaps = value;
+        }
+
+        [Category(Counts), Description("Completed Double Swap Trades")]
+        public int CompletedDoubleSwaps
+        {
+            get => _completedDoubleSwaps;
+            set => _completedDoubleSwaps = value;
+        }
+
+        [Category(Counts), Description("Completed Item Swap Trades")]
+        public int CompletedItemSwaps
+        {
+            get => _completedItemSwaps;
+            set => _completedItemSwaps = value;
+        }
+
+        [Category(Counts), Description("Completed EV Swap Trades")]
+        public int CompletedEVSwaps
+        {
+            get => _completedEVSwaps;
+            set => _completedEVSwaps = value;
+        }
+
         [Category(Counts), Description("When enabled, the counts will be emitted when a status check is requested.")]
         public bool EmitCountsOnStatusCheck { get; set; }
 
@@ -101,6 +141,11 @@ namespace SysBot.Pokemon
         public void AddCompletedDistribution() => Interlocked.Increment(ref _completedDistribution);
         public void AddCompletedDumps() => Interlocked.Increment(ref _completedDumps);
         public void AddCompletedClones() => Interlocked.Increment(ref _completedClones);
+        public void AddCompletedTeraSwaps() => Interlocked.Increment(ref _completedTeraSwaps);
+        public void AddCompletedBallSwaps() => Interlocked.Increment(ref _completedBallSwaps);
+        public void AddCompletedDoubleSwaps() => Interlocked.Increment(ref _completedDoubleSwaps);
+        public void AddCompletedItemSwaps() => Interlocked.Increment(ref _completedItemSwaps);
+        public void AddCompletedEVSwaps() => Interlocked.Increment(ref _completedEVSwaps);
 
         public IEnumerable<string> GetNonZeroCounts()
         {
@@ -118,6 +163,16 @@ namespace SysBot.Pokemon
                 yield return $"Distribution Trades: {CompletedDistribution}";
             if (CompletedSurprise != 0)
                 yield return $"Surprise Trades: {CompletedSurprise}";
+            if (CompletedTeraSwaps!= 0)
+                yield return $"Tera Swaps: {CompletedTeraSwaps}";
+            if (CompletedBallSwaps != 0)
+                yield return $"Ball Swaps: {CompletedBallSwaps}";
+            if (CompletedDoubleSwaps != 0)
+                yield return $"Double Swaps: {CompletedDoubleSwaps}";
+            if (CompletedItemSwaps != 0)
+                yield return $"Item Swaps: {CompletedItemSwaps}";
+            if (CompletedEVSwaps != 0)
+                yield return $"EV Swaps: {CompletedEVSwaps}";
         }
     }
 }

@@ -83,7 +83,7 @@ namespace SysBot.Pokemon
         public override async Task HardStop()
         {
             UpdateBarrier(false);
-            await CleanExit(TradeSettings, CancellationToken.None).ConfigureAwait(false);
+            await CleanExit(CancellationToken.None).ConfigureAwait(false);
         }
 
         private async Task InnerLoop(SAV8LA sav, CancellationToken token)
@@ -102,8 +102,12 @@ namespace SysBot.Pokemon
                 }
                 catch (SocketException e)
                 {
-                    Log(e.Message);
-                    Connection.Reset();
+                    Connection.LogError(e.StackTrace);
+                    var attempts = Hub.Config.Timings.ReconnectAttempts;
+                    var delay = Hub.Config.Timings.ExtraReconnectDelay;
+                    var protocol = Config.Connection.Protocol;
+                    if (!await TryReconnect(attempts, delay, protocol, token).ConfigureAwait(false))
+                        return;
                 }
             }
         }
@@ -505,7 +509,7 @@ namespace SysBot.Pokemon
                     await Click(B, 0_100, token).ConfigureAwait(false);
 
                 // Wait for user input... Needs to be different from the previously offered Pokémon.
-                var pk = await ReadUntilPresent(TradePartnerOfferedOffset, 3_000, 0_050, BoxFormatSlotSize, token).ConfigureAwait(false);
+                var pk = await ReadUntilPresentPointer(Offsets.LinkTradePartnerPokemonPointer, 3_000, 0_050, BoxFormatSlotSize, token).ConfigureAwait(false);
                 if (pk == null || pk.Species < 1 || !pk.ChecksumValid || SearchUtil.HashByDetails(pk) == SearchUtil.HashByDetails(pkprev))
                     continue;
 
@@ -595,7 +599,7 @@ namespace SysBot.Pokemon
             }
 
             // If we got to here, we can read their offered Pokémon.
-            var pk2 = await ReadUntilPresent(TradePartnerOfferedOffset, 5_000, 1_000, BoxFormatSlotSize, token).ConfigureAwait(false);
+            var pk2 = await ReadUntilPresentPointer(Offsets.LinkTradePartnerPokemonPointer, 5_000, 1_000, BoxFormatSlotSize, token).ConfigureAwait(false);
             if (pk2 is null || SearchUtil.HashByDetails(pk2) == SearchUtil.HashByDetails(offered))
             {
                 Log("Trade partner did not change their Pokémon.");

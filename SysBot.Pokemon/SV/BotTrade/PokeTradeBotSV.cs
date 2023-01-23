@@ -8,6 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using static SysBot.Base.SwitchButton;
 using static SysBot.Pokemon.PokeDataOffsetsSV;
+using System.Numerics;
+using System.Collections.Generic;
 
 namespace SysBot.Pokemon
 {
@@ -103,7 +105,7 @@ namespace SysBot.Pokemon
         public override async Task HardStop()
         {
             UpdateBarrier(false);
-            await CleanExit(TradeSettings, CancellationToken.None).ConfigureAwait(false);
+            await CleanExit(CancellationToken.None).ConfigureAwait(false);
         }
 
         private async Task InnerLoop(SAV9SV sav, CancellationToken token)
@@ -122,8 +124,12 @@ namespace SysBot.Pokemon
                 }
                 catch (SocketException e)
                 {
-                    Log(e.Message);
-                    Connection.Reset();
+                    Connection.LogError(e.StackTrace);
+                    var attempts = Hub.Config.Timings.ReconnectAttempts;
+                    var delay = Hub.Config.Timings.ExtraReconnectDelay;
+                    var protocol = Config.Connection.Protocol;
+                    if (!await TryReconnect(attempts, delay, protocol, token).ConfigureAwait(false))
+                        return;
                 }
             }
         }
@@ -176,6 +182,8 @@ namespace SysBot.Pokemon
         {
             if (Hub.Queues.TryDequeue(type, out var detail, out var priority))
                 return (detail, priority);
+            if (Hub.Queues.TryDequeueClone(out detail))
+                return (detail, PokeTradePriorities.TierFree);
             if (Hub.Queues.TryDequeueLedy(out detail))
                 return (detail, PokeTradePriorities.TierFree);
             return (null, PokeTradePriorities.TierFree);
@@ -260,13 +268,13 @@ namespace SysBot.Pokemon
 
             await Click(A, 1_500, token).ConfigureAwait(false);
             // Make sure we clear any Link Codes if we're not in Distribution with fixed code, and it wasn't entered last round.
-            if (poke.Type != PokeTradeType.Random || !LastTradeDistributionFixed)
+            if (!LastTradeDistributionFixed)
             {
                 await Click(X, 1_000, token).ConfigureAwait(false);
                 await Click(PLUS, 1_000, token).ConfigureAwait(false);
 
                 // Loading code entry.
-                if (poke.Type != PokeTradeType.Random)
+                if (poke.Type != PokeTradeType.Random | (poke.Type != PokeTradeType.Clone && Hub.Config.Distribution.CloneWhileIdle))
                     Hub.Config.Stream.StartEnterCode(this);
                 await Task.Delay(Hub.Config.Timings.ExtraTimeOpenCodeEntry, token).ConfigureAwait(false);
 
@@ -278,7 +286,10 @@ namespace SysBot.Pokemon
                 StartFromOverworld = false;
             }
 
-            LastTradeDistributionFixed = poke.Type == PokeTradeType.Random && !Hub.Config.Distribution.RandomCode;
+            if ((poke.Type == PokeTradeType.Random) || (poke.Type == PokeTradeType.Clone && Hub.Config.Distribution.CloneWhileIdle))
+            {
+                LastTradeDistributionFixed = !Hub.Config.Distribution.RandomCode;
+            }
 
             // Search for a trade partner for a Link Trade.
             await Click(A, 1_000, token).ConfigureAwait(false);
@@ -345,75 +356,110 @@ namespace SysBot.Pokemon
                 return partnerCheck;
             }
 
-            // Hard check to verify that the offset changed from the last thing offered from the previous trade.
-            // This is because box opening times can vary per person, the offset persists between trades, and can also change offset between trades.
-            var tradeOffered = await ReadUntilChanged(TradePartnerOfferedOffset, lastOffered, 10_000, 0_500, false, true, token).ConfigureAwait(false);
-            if (!tradeOffered)
-                return PokeTradeResult.TrainerTooSlow;
+            bool isDistribution = false;
+            if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
+                isDistribution = true;
+            var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
 
             poke.SendNotification(this, $"Found Link Trade partner: {tradePartner.TrainerName}. Waiting for a Pokémon...");
 
-            if (poke.Type == PokeTradeType.Dump)
+            int multiTrade = 0;
+            while (multiTrade < Hub.Config.Distribution.TradesPerEncounter)
             {
-                var result = await ProcessDumpTradeAsync(poke, token).ConfigureAwait(false);
-                await ExitTradeToPortal(false, token).ConfigureAwait(false);
-                return result;
+
+                if (multiTrade > 0)
+                {
+                    list.TryRegister(trainerNID, tradePartner.TrainerName);
+                }
+
+                // Hard check to verify that the offset changed from the last thing offered from the previous trade.
+                // This is because box opening times can vary per person, the offset persists between trades, and can also change offset between trades.
+                
+                var tradeOffered = await ReadUntilChanged(TradePartnerOfferedOffset, lastOffered, 10_000, 0_500, false, true, token).ConfigureAwait(false);
+                Log($"Trade partner offered offset is {TradePartnerOfferedOffset}");
+                if (!tradeOffered)
+                {
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return PokeTradeResult.TrainerTooSlow;
+                }
+
+                if (poke.Type == PokeTradeType.Dump)
+                {
+                    var result = await ProcessDumpTradeAsync(poke, token).ConfigureAwait(false);
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return result;
+                }
+
+                // Wait for user input...
+                var offered = await ReadUntilPresent(TradePartnerOfferedOffset, 25_000, 1_000, BoxFormatSlotSize, token).ConfigureAwait(false);
+                var oldEC = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
+                if (offered == null || offered.Species < 1 || !offered.ChecksumValid)
+                {
+                    Log("Trade ended because a valid Pokémon was not offered.");
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return PokeTradeResult.TrainerTooSlow;
+                }
+
+                PokeTradeResult update;
+                var trainer = new PartnerDataHolder(0, tradePartner.TrainerName, tradePartner.TID7);
+                (toSend, update) = await GetEntityToSend(sav, poke, offered, oldEC, toSend, trainer, token).ConfigureAwait(false);
+                if (update != PokeTradeResult.Success)
+                {
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return update;
+                }
+
+                Log("Confirming trade.");
+                var tradeResult = await ConfirmAndStartTrading(poke, token).ConfigureAwait(false);
+                if (tradeResult != PokeTradeResult.Success)
+                {
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return tradeResult;
+                }
+
+                if (token.IsCancellationRequested)
+                {
+                    StartFromOverworld = true;
+                    LastTradeDistributionFixed = false;
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return PokeTradeResult.RoutineCancel;
+                }
+
+                // Trade was Successful!
+                var received = await ReadPokemon(BoxStartOffset, BoxFormatSlotSize, token).ConfigureAwait(false);
+                // Pokémon in b1s1 is same as the one they were supposed to receive (was never sent).
+                if (SearchUtil.HashByDetails(received) == SearchUtil.HashByDetails(toSend) && received.Checksum == toSend.Checksum)
+                {
+                    Log("User did not complete the trade.");
+                    await ExitTradeToPortal(false, token).ConfigureAwait(false);
+                    return PokeTradeResult.TrainerTooSlow;
+                }
+
+                // As long as we got rid of our inject in b1s1, assume the trade went through.
+                Log("User completed the trade.");
+                poke.TradeFinished(this, received);
+
+                // Only log if we completed the trade.
+                UpdateCountsAndExport(poke, received, toSend);
+
+                // Sometimes they offered another mon, so store that immediately upon leaving Union Room.
+                lastOffered = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
+
+                if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
+                {
+                    multiTrade++;
+                } else
+                {
+                    multiTrade = Hub.Config.Distribution.TradesPerEncounter;
+                }
+
+                if (multiTrade < Hub.Config.Distribution.TradesPerEncounter)
+                {
+                    await Task.Delay(10_000, token).ConfigureAwait(false);
+                }
             }
 
-            // Wait for user input...
-            var offered = await ReadUntilPresent(TradePartnerOfferedOffset, 25_000, 1_000, BoxFormatSlotSize, token).ConfigureAwait(false);
-            var oldEC = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
-            if (offered == null || offered.Species < 1 || !offered.ChecksumValid)
-            {
-                Log("Trade ended because a valid Pokémon was not offered.");
-                await ExitTradeToPortal(false, token).ConfigureAwait(false);
-                return PokeTradeResult.TrainerTooSlow;
-            }
-
-            PokeTradeResult update;
-            var trainer = new PartnerDataHolder(0, tradePartner.TrainerName, tradePartner.TID7);
-            (toSend, update) = await GetEntityToSend(sav, poke, offered, oldEC, toSend, trainer, token).ConfigureAwait(false);
-            if (update != PokeTradeResult.Success)
-            {
-                await ExitTradeToPortal(false, token).ConfigureAwait(false);
-                return update;
-            }
-
-            Log("Confirming trade.");
-            var tradeResult = await ConfirmAndStartTrading(poke, token).ConfigureAwait(false);
-            if (tradeResult != PokeTradeResult.Success)
-            {
-                await ExitTradeToPortal(false, token).ConfigureAwait(false);
-                return tradeResult;
-            }
-
-            if (token.IsCancellationRequested)
-            {
-                StartFromOverworld = true;
-                LastTradeDistributionFixed = false;
-                await ExitTradeToPortal(false, token).ConfigureAwait(false);
-                return PokeTradeResult.RoutineCancel;
-            }
-
-            // Trade was Successful!
-            var received = await ReadPokemon(BoxStartOffset, BoxFormatSlotSize, token).ConfigureAwait(false);
-            // Pokémon in b1s1 is same as the one they were supposed to receive (was never sent).
-            if (SearchUtil.HashByDetails(received) == SearchUtil.HashByDetails(toSend) && received.Checksum == toSend.Checksum)
-            {
-                Log("User did not complete the trade.");
-                await ExitTradeToPortal(false, token).ConfigureAwait(false);
-                return PokeTradeResult.TrainerTooSlow;
-            }
-
-            // As long as we got rid of our inject in b1s1, assume the trade went through.
-            Log("User completed the trade.");
-            poke.TradeFinished(this, received);
-
-            // Only log if we completed the trade.
-            UpdateCountsAndExport(poke, received, toSend);
-
-            // Sometimes they offered another mon, so store that immediately upon leaving Union Room.
-            lastOffered = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
+            list.TryRegister(trainerNID, tradePartner.TrainerName);
 
             await ExitTradeToPortal(false, token).ConfigureAwait(false);
             return PokeTradeResult.Success;
@@ -790,12 +836,280 @@ namespace SysBot.Pokemon
             return poke.Type switch
             {
                 PokeTradeType.Random => await HandleRandomLedy(sav, poke, offered, toSend, partnerID, token).ConfigureAwait(false),
-                PokeTradeType.Clone => await HandleClone(sav, poke, offered, oldEC, token).ConfigureAwait(false),
+                PokeTradeType.Clone => await HandleClone(sav, poke, offered, oldEC, partnerID, token).ConfigureAwait(false),
                 _ => (toSend, PokeTradeResult.Success),
             };
         }
 
-        private async Task<(PK9 toSend, PokeTradeResult check)> HandleClone(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, byte[] oldEC, CancellationToken token)
+        private (PK9 clone, string tradeType, PokeTradeResult check) GetCloneSwapInfo(PK9 clone, PK9 offered, CancellationToken token)
+        {
+            string swap = "";
+            string info = "";
+            bool evNickname = offered.Nickname.All(c => "M0SA".Contains(c)) && offered.Nickname.Length == 6;
+            string item = GameInfo.GetStrings(1).Item[clone.HeldItem];
+            if (clone.HeldItem == 17)
+            {
+                Log("Clone request is requesting an item swap");
+                swap = "Item";
+            }
+            if (clone.HeldItem != 0 && clone.HeldItem != 17 && swap == "")
+            {
+                string[] itemString = item.Split(' ');
+                if (itemString.Length > 1)
+                {
+                    swap = itemString[1];
+                    if (swap != "Ball" && swap != "Tera")
+                        swap = "";
+                }
+                
+                info = itemString[0];
+            }
+            if (evNickname && swap == "")
+            {
+                Log("Clone request is requesting an EV spread");
+                swap = "EV";
+            }
+
+            Log($"Clone request is holding a {item}");
+
+            string info2 = "";
+            string swap2 = "";
+            string swap1 = "";
+            if (offered.IsNicknamed && swap != "")
+                (swap1, info2, swap2, swap) = CheckDoubleSwap(swap, offered.Nickname, token);
+            return swap switch
+            {
+                "Tera" => HandleTeraSwap(info, clone, offered, token),
+                "Ball" => HandleBallSwap(info, clone, offered, token),
+                "Double" => HandleDoubleSwap(info, swap1, info2, swap2, clone, offered, token),
+                "Item" => HandleItemSwap(clone, offered, token),
+                "EV" => HandleEVSwap(clone, offered, token),
+                _ => (clone, swap, PokeTradeResult.Success),
+            };
+        }
+
+        private (string swap1, string info2, string swap2, string swap) CheckDoubleSwap(string swap, string nickname, CancellationToken token)
+        {
+            Log($"Clone request is named {nickname}");
+            if (swap == "Ball")
+            {
+                bool EVSwap = nickname.All(c => "M0SA".Contains(c));
+                if (EVSwap && nickname.Length == 6)
+                    return (swap, nickname, "EV", "Double");
+
+                MoveType a;
+                try
+                {
+                    if (nickname == "Any")
+                        return (swap, "None", "None", swap);
+                    a = (MoveType)Enum.Parse(typeof(MoveType), nickname);
+                    return (swap, nickname, "Tera", "Double");
+                }
+                catch (Exception e)
+                {
+                    Log(e.Message);
+                    return (swap, "None", "None", swap);
+                }
+            } else if (swap == "Tera")
+            {
+                bool EVSwap = nickname.All(c => "M0SA".Contains(c));
+                if (EVSwap && nickname.Length == 6)
+                    return (swap, nickname, "EV", "Double");
+
+                Ball b;
+                if (nickname == "Poké")
+                    nickname = "Poke";
+
+                try
+                {
+                    if (nickname == "None")
+                        return(swap, "None", "None", swap);
+                    b = (Ball)Enum.Parse(typeof(Ball), nickname);
+                    return (swap, nickname, "Ball", "Double");
+                }
+                catch (Exception e)
+                {
+                    Log(e.Message);
+                    return (swap, "None", "None", swap);
+                }
+            } else
+            {
+                return (swap, "None", "None", swap);
+            }
+        }
+
+        private (PK9 clone, string tradeType, PokeTradeResult check) HandleDoubleSwap(string info, string swap1, string info2, string swap2, PK9 clone, PK9 offered, CancellationToken token)
+        {
+            int i = 0;
+            string[] multiSwap = new string[2] { swap1, swap2 };
+            string[] multiInfo = new string[2] { info, info2 };
+            PokeTradeResult update = new();
+            foreach (var pair in multiSwap)
+            {
+                switch (pair)
+                {
+                    case "Tera":
+                        (clone, _, update) = HandleTeraSwap(multiInfo[i++], clone, offered, token);
+                        break;
+
+                    case "Ball":
+                        (clone, _, update) = HandleBallSwap(multiInfo[i++], clone, offered, token);
+                        break;
+
+                    case "EV":
+                        (clone, _, update) = HandleEVSwap(clone, offered, token);
+                        i++;
+                        break;
+                }
+            }
+            if (clone.IsNicknamed)
+            {
+                clone.SetDefaultNickname();
+                clone.RefreshChecksum();
+            }
+            return (clone, "Double", update);
+        }
+
+        private (PK9 clone, string tradeType, PokeTradeResult check) HandleTeraSwap(string type, PK9 clone, PK9 offered, CancellationToken token)
+        {
+            string swap = "Tera";
+            MoveType a;
+            try
+            {
+                a = (MoveType)Enum.Parse(typeof(MoveType), type);
+                clone.TeraTypeOverride = a;
+                clone.RefreshChecksum();
+                return (clone, swap, PokeTradeResult.Success);
+            }
+            catch (Exception e)
+            {
+                Log(e.Message);
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+            }
+        }
+
+        private (PK9 clone, string tradeType, PokeTradeResult check) HandleBallSwap(string ball, PK9 clone, PK9 offered, CancellationToken token)
+        {
+            string swap = "Ball";
+            Ball b;
+            if (clone.Species > 905 && clone.Species < 915)
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+
+            if (offered.FatefulEncounter || ball == "Smoke" || ball == "Iron" || ball == "Light")
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+
+            if (offered.Met_Location == 30001)
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+
+            if (offered.Met_Location == 130 || offered.Met_Location == 131)
+                if (offered.Met_Level == 5)
+                    return (offered, swap, PokeTradeResult.TrainerRequestBad);
+
+            if (offered.WasEgg)
+            {
+                if (ball == "Master" || ball == "Cherish")
+                    return (offered, swap, PokeTradeResult.TrainerRequestBad);
+            }
+
+            if (ball == "Poké")
+                ball = "Poke";
+
+            try
+            {
+                b = (Ball)Enum.Parse(typeof(Ball), ball);
+                clone.Ball = (int)b;
+                clone.RefreshChecksum();
+                return (clone, swap, PokeTradeResult.Success);
+            }
+            catch (Exception e)
+            {
+                Log(e.Message);
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+            }
+        }
+
+        private (PK9 clone, string tradeType, PokeTradeResult check) HandleEVSwap(PK9 clone, PK9 offered, CancellationToken token)
+        {
+            var swap = "EV";
+            int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
+            if (offered.Nickname == "Reset")
+            {
+                clone.SetEVs(spread);
+                clone.SetDefaultNickname();
+                clone.RefreshChecksum();
+                return (clone, swap, PokeTradeResult.Success);
+            } 
+            int i = 0;
+            List<int> splitEV = new();
+            char[] nickChars = offered.Nickname.ToCharArray();
+            int maxEV = 510;
+            if (offered.Nickname.Length != 6)
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+            foreach (char f in nickChars)
+            {
+                if (f == 'M')
+                {
+                    spread[i++] = 252;
+                } else if (f == '0')
+                {
+                    spread[i++] = 0;
+                } else if (f == 'S')
+                {
+                    splitEV.Add(i++);
+                } else if (f == 'A')
+                {
+                    spread[i] = offered.GetEV(i++);
+                } else
+                {
+                    return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                }
+            }
+
+            if (spread.Sum() > maxEV)
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+
+            if (splitEV.Count != 0)
+            {
+                int split = (maxEV - spread.Sum()) / splitEV.Count;
+                if (split > 252)
+                    split = 252;
+                foreach (int e in splitEV)
+                {
+                    spread[e] = split;
+                }
+            }
+
+            if (spread.Sum() > maxEV)
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+
+            clone.SetEVs(spread);
+            clone.SetDefaultNickname();
+            clone.RefreshChecksum();
+            return (clone, swap, PokeTradeResult.Success);
+        }
+
+        private (PK9 clone, string tradeType, PokeTradeResult check) HandleItemSwap(PK9 clone, PK9 offered, CancellationToken token)
+        {
+            var swap = "Item";
+            bool isParsable = short.TryParse(clone.Nickname, out short itemID);
+            if (!isParsable)
+            {
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+            }
+            itemID -= 1;
+            Log($"User is requesting item {GameInfo.GetStrings(1).Item[itemID]}");
+            bool canHold = ItemRestrictions.IsHeldItemAllowed(itemID, clone.Context);
+            if (!canHold)
+            {
+                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+            }
+            clone.HeldItem = itemID;
+            clone.RefreshChecksum();
+            return (clone, swap, PokeTradeResult.Success);
+
+        }
+
+        private async Task<(PK9 toSend, PokeTradeResult check)> HandleClone(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, byte[] oldEC, PartnerDataHolder partner, CancellationToken token)
         {
             if (Hub.Config.Discord.ReturnPKMs)
                 poke.SendNotification(this, offered, "Here's what you showed me!");
@@ -819,6 +1133,12 @@ namespace SysBot.Pokemon
             if (Hub.Config.Legality.ResetHOMETracker)
                 clone.Tracker = 0;
 
+            PokeTradeResult update;
+            string tradeType;
+            (clone, tradeType, update)  = GetCloneSwapInfo(clone, offered, token);
+            if (update != PokeTradeResult.Success)
+                return (offered, PokeTradeResult.TrainerRequestBad);
+
             poke.SendNotification(this, $"**Cloned your {GameInfo.GetStrings(1).Species[clone.Species]}!**\nNow press B to cancel your offer and trade me a Pokémon you don't want.");
             Log($"Cloned a {GameInfo.GetStrings(1).Species[clone.Species]}. Waiting for user to change their Pokémon...");
 
@@ -841,6 +1161,16 @@ namespace SysBot.Pokemon
             await Click(A, 0_800, token).ConfigureAwait(false);
             await SetBoxPokemonAbsolute(BoxStartOffset, clone, token, sav).ConfigureAwait(false);
 
+            if (tradeType == "Ball")
+                Hub.Config.Trade.AddCompletedBallSwaps();
+            if (tradeType == "Tera")
+                Hub.Config.Trade.AddCompletedTeraSwaps();
+            if (tradeType == "Double")
+                Hub.Config.Trade.AddCompletedDoubleSwaps();
+            if (tradeType == "Item")
+                Hub.Config.Trade.AddCompletedItemSwaps();
+            if (tradeType == "EV")
+                Hub.Config.Trade.AddCompletedEVSwaps();
             return (clone, PokeTradeResult.Success);
         }
 
@@ -866,7 +1196,7 @@ namespace SysBot.Pokemon
                 toSend = trade.Receive;
                 poke.TradeData = toSend;
 
-                poke.SendNotification(this, "Injecting the requested Pokémon.");
+                poke.SendNotification(this, $"Injecting the requested Pokémon {toSend.Nickname}.");
                 await SetBoxPokemonAbsolute(BoxStartOffset, toSend, token, sav).ConfigureAwait(false);
             }
             else if (config.LedyQuitIfNoMatch)
@@ -928,7 +1258,9 @@ namespace SysBot.Pokemon
         {
             bool quit = false;
             var user = poke.Trainer;
-            var isDistribution = poke.Type == PokeTradeType.Random;
+            bool isDistribution = false;
+            if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
+                isDistribution = true;
             var useridmsg = isDistribution ? "" : $" ({user.ID})";
             var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
 
@@ -936,13 +1268,14 @@ namespace SysBot.Pokemon
             if (cooldown != null)
             {
                 var delta = DateTime.Now - cooldown.Time;
-                Log($"Last saw {user.TrainerName} {delta.TotalMinutes:F1} minutes ago (OT: {TrainerName}).");
+                Log($"Last saw {TrainerName} {delta.TotalMinutes:F1} minutes ago (OT: {TrainerName}).");
 
                 var cd = AbuseSettings.TradeCooldown;
                 if (cd != 0 && TimeSpan.FromMinutes(cd) > delta)
                 {
                     poke.Notifier.SendNotification(this, poke, "You have ignored the trade cooldown set by the bot owner. The owner has been notified.");
-                    var msg = $"Found {user.TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
+                    var msg = $"Found {TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
+                    list.TryRegister(TrainerNID, TrainerName);
                     if (AbuseSettings.EchoNintendoOnlineIDCooldown)
                         msg += $"\nID: {TrainerNID}";
                     if (!string.IsNullOrWhiteSpace(AbuseSettings.CooldownAbuseEchoMention))
@@ -981,9 +1314,8 @@ namespace SysBot.Pokemon
 
             // Try registering the partner in our list of recently seen.
             // Get back the details of their previous interaction.
-            var previous = isDistribution
-                ? list.TryRegister(TrainerNID, TrainerName)
-                : list.TryRegister(TrainerNID, TrainerName, poke.Trainer.ID);
+            var previous = list.TryGetPrevious(TrainerNID);
+
             if (previous != null && previous.NetworkID != TrainerNID && !isDistribution)
             {
                 var delta = DateTime.Now - previous.Time;
