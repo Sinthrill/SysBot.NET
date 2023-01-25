@@ -10,6 +10,8 @@ using static SysBot.Base.SwitchButton;
 using static SysBot.Pokemon.PokeDataOffsetsSV;
 using System.Numerics;
 using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
 
 namespace SysBot.Pokemon
 {
@@ -455,7 +457,7 @@ namespace SysBot.Pokemon
 
                 if (multiTrade < Hub.Config.Distribution.TradesPerEncounter)
                 {
-                    await Task.Delay(10_000, token).ConfigureAwait(false);
+                    await Task.Delay(11_000, token).ConfigureAwait(false);
                 }
             }
 
@@ -841,11 +843,12 @@ namespace SysBot.Pokemon
             };
         }
 
-        private (PK9 clone, string tradeType, PokeTradeResult check) GetCloneSwapInfo(PK9 clone, PK9 offered, CancellationToken token)
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) GetCloneSwapInfo(PK9 clone, PK9 offered)
         {
             string swap = "";
             string info = "";
             bool evNickname = offered.Nickname.All(c => "M0SA".Contains(c)) && offered.Nickname.Length == 6;
+            bool evHexNickname = offered.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && offered.Nickname.Length == 12;
             string item = GameInfo.GetStrings(1).Item[clone.HeldItem];
             if (clone.HeldItem == 17)
             {
@@ -864,10 +867,13 @@ namespace SysBot.Pokemon
                 
                 info = itemString[0];
             }
-            if (evNickname && swap == "")
+            if (evNickname || evHexNickname)
             {
-                Log("Clone request is requesting an EV spread");
-                swap = "EV";
+                if (swap == "")
+                {
+                    Log("Clone request is requesting an EV spread");
+                    swap = "EV";
+                }
             }
 
             Log($"Clone request is holding a {item}");
@@ -876,25 +882,26 @@ namespace SysBot.Pokemon
             string swap2 = "";
             string swap1 = "";
             if (offered.IsNicknamed && swap != "")
-                (swap1, info2, swap2, swap) = CheckDoubleSwap(swap, offered.Nickname, token);
+                (swap1, info2, swap2, swap) = CheckDoubleSwap(swap, offered.Nickname);
             return swap switch
             {
-                "Tera" => HandleTeraSwap(info, clone, offered, token),
-                "Ball" => HandleBallSwap(info, clone, offered, token),
-                "Double" => HandleDoubleSwap(info, swap1, info2, swap2, clone, offered, token),
-                "Item" => HandleItemSwap(clone, offered, token),
-                "EV" => HandleEVSwap(clone, offered, token),
-                _ => (clone, swap, PokeTradeResult.Success),
+                "Tera" => HandleTeraSwap(info, clone, offered),
+                "Ball" => HandleBallSwap(info, clone, offered),
+                "Double" => HandleDoubleSwap(info, swap1, info2, swap2, clone, offered),
+                "Item" => HandleItemSwap(clone, offered),
+                "EV" => HandleEVSwap(clone, offered),
+                _ => (clone, swap, swap1, swap2, PokeTradeResult.Success),
             };
         }
 
-        private (string swap1, string info2, string swap2, string swap) CheckDoubleSwap(string swap, string nickname, CancellationToken token)
+        private (string swap1, string info2, string swap2, string swap) CheckDoubleSwap(string swap, string nickname)
         {
             Log($"Clone request is named {nickname}");
             if (swap == "Ball")
             {
-                bool EVSwap = nickname.All(c => "M0SA".Contains(c));
-                if (EVSwap && nickname.Length == 6)
+                bool EVSwap = nickname.All(c => "M0SA".Contains(c)) && nickname.Length == 6;
+                bool EVHexSwap = nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && nickname.Length == 12;
+                if (EVSwap || EVHexSwap)
                     return (swap, nickname, "EV", "Double");
 
                 MoveType a;
@@ -912,8 +919,9 @@ namespace SysBot.Pokemon
                 }
             } else if (swap == "Tera")
             {
-                bool EVSwap = nickname.All(c => "M0SA".Contains(c));
-                if (EVSwap && nickname.Length == 6)
+                bool EVSwap = nickname.All(c => "M0SA".Contains(c)) && nickname.Length == 6;
+                bool EVHexSwap = nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && nickname.Length == 12;
+                if (EVSwap || EVHexSwap)
                     return (swap, nickname, "EV", "Double");
 
                 Ball b;
@@ -938,7 +946,7 @@ namespace SysBot.Pokemon
             }
         }
 
-        private (PK9 clone, string tradeType, PokeTradeResult check) HandleDoubleSwap(string info, string swap1, string info2, string swap2, PK9 clone, PK9 offered, CancellationToken token)
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleDoubleSwap(string info, string swap1, string info2, string swap2, PK9 clone, PK9 offered)
         {
             int i = 0;
             string[] multiSwap = new string[2] { swap1, swap2 };
@@ -949,15 +957,15 @@ namespace SysBot.Pokemon
                 switch (pair)
                 {
                     case "Tera":
-                        (clone, _, update) = HandleTeraSwap(multiInfo[i++], clone, offered, token);
+                        (clone, _, _, _, update) = HandleTeraSwap(multiInfo[i++], clone, offered);
                         break;
 
                     case "Ball":
-                        (clone, _, update) = HandleBallSwap(multiInfo[i++], clone, offered, token);
+                        (clone, _, _, _, update) = HandleBallSwap(multiInfo[i++], clone, offered);
                         break;
 
                     case "EV":
-                        (clone, _, update) = HandleEVSwap(clone, offered, token);
+                        (clone, _, _, _, update) = HandleEVSwap(clone, offered);
                         i++;
                         break;
                 }
@@ -967,48 +975,48 @@ namespace SysBot.Pokemon
                 clone.SetDefaultNickname();
                 clone.RefreshChecksum();
             }
-            return (clone, "Double", update);
+            return (clone, "Double", swap1, swap2, update);
         }
 
-        private (PK9 clone, string tradeType, PokeTradeResult check) HandleTeraSwap(string type, PK9 clone, PK9 offered, CancellationToken token)
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleTeraSwap(string type, PK9 clone, PK9 offered)
         {
-            string swap = "Tera";
+            string swap = "Tera", swap1 = "", swap2 = "";
             MoveType a;
             try
             {
                 a = (MoveType)Enum.Parse(typeof(MoveType), type);
                 clone.TeraTypeOverride = a;
                 clone.RefreshChecksum();
-                return (clone, swap, PokeTradeResult.Success);
+                return (clone, swap, swap1, swap2, PokeTradeResult.Success);
             }
             catch (Exception e)
             {
                 Log(e.Message);
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
         }
 
-        private (PK9 clone, string tradeType, PokeTradeResult check) HandleBallSwap(string ball, PK9 clone, PK9 offered, CancellationToken token)
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleBallSwap(string ball, PK9 clone, PK9 offered)
         {
-            string swap = "Ball";
+            string swap = "Ball", swap1 = "", swap2 = "";
             Ball b;
             if (clone.Species > 905 && clone.Species < 915)
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
             if (offered.FatefulEncounter || ball == "Smoke" || ball == "Iron" || ball == "Light")
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
             if (offered.Met_Location == 30001)
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
             if (offered.Met_Location == 130 || offered.Met_Location == 131)
                 if (offered.Met_Level == 5)
-                    return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                    return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
             if (offered.WasEgg)
             {
                 if (ball == "Master" || ball == "Cherish")
-                    return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                    return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
 
             if (ball == "Poké")
@@ -1019,93 +1027,172 @@ namespace SysBot.Pokemon
                 b = (Ball)Enum.Parse(typeof(Ball), ball);
                 clone.Ball = (int)b;
                 clone.RefreshChecksum();
-                return (clone, swap, PokeTradeResult.Success);
+                return (clone, swap, swap1, swap2, PokeTradeResult.Success);
             }
             catch (Exception e)
             {
                 Log(e.Message);
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
         }
 
-        private (PK9 clone, string tradeType, PokeTradeResult check) HandleEVSwap(PK9 clone, PK9 offered, CancellationToken token)
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleEVSwap(PK9 clone, PK9 offered)
         {
-            var swap = "EV";
+            string swap = "EV", swap1 = "", swap2 = "";
             int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
             if (offered.Nickname == "Reset")
             {
                 clone.SetEVs(spread);
                 clone.SetDefaultNickname();
                 clone.RefreshChecksum();
-                return (clone, swap, PokeTradeResult.Success);
+                return (clone, swap, swap1, swap2, PokeTradeResult.Success);
             } 
-            int i = 0;
-            List<int> splitEV = new();
-            char[] nickChars = offered.Nickname.ToCharArray();
+            int i = 0, j = 0;
             int maxEV = 510;
-            if (offered.Nickname.Length != 6)
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
-            foreach (char f in nickChars)
+            if (offered.Nickname.Length == 6)
             {
-                if (f == 'M')
+                List<int> splitEV = new();
+                char[] nickChars = offered.Nickname.ToCharArray();
+                foreach (char f in nickChars)
                 {
-                    spread[i++] = 252;
-                } else if (f == '0')
-                {
-                    spread[i++] = 0;
-                } else if (f == 'S')
-                {
-                    splitEV.Add(i++);
-                } else if (f == 'A')
-                {
-                    spread[i] = offered.GetEV(i++);
-                } else
-                {
-                    return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                    if (f == 'M')
+                    {
+                        spread[i++] = 252;
+                    }
+                    else if (f == '0')
+                    {
+                        spread[i++] = 0;
+                    }
+                    else if (f == 'S')
+                    {
+                        splitEV.Add(i++);
+                    }
+                    else if (f == 'A')
+                    {
+                        spread[i] = offered.GetEV(i++);
+                    }
+                    else
+                    {
+                        return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+                    }
                 }
-            }
 
-            if (spread.Sum() > maxEV)
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                if (spread.Sum() > maxEV)
+                    return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
-            if (splitEV.Count != 0)
+                if (splitEV.Count != 0)
+                {
+                    int split = (maxEV - spread.Sum()) / splitEV.Count;
+                    if (split > 252)
+                        split = 252;
+                    foreach (int e in splitEV)
+                    {
+                        spread[e] = split;
+                    }
+                }
+
+                if (spread.Sum() > maxEV)
+                    return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+
+                clone.SetEVs(spread);
+                clone.SetDefaultNickname();
+                clone.RefreshChecksum();
+                return (clone, swap, swap1, swap2, PokeTradeResult.Success);
+            } else if (offered.Nickname.Length == 12)
             {
-                int split = (maxEV - spread.Sum()) / splitEV.Count;
-                if (split > 252)
-                    split = 252;
-                foreach (int e in splitEV)
+                List<string> nickHexValues = new();
+                for (i = 0; i < 12; i += 2)
                 {
-                    spread[e] = split;
+                    nickHexValues.Add(offered.Nickname.Substring(i, 2));
                 }
+                foreach (string f in nickHexValues)
+                {
+                    if (f == "NN")
+                        spread[j++] = 0;
+                    else if (f == "SS")
+                        spread[j] = offered.GetEV(j++);
+                    else
+                    {
+                        int EVValue = Convert.ToInt32(f, 16);
+                        if (EVValue > 252)
+                            EVValue = 252;
+                        spread[j++] = EVValue;
+                    }
+                }
+
+                if (spread.Sum() > maxEV)
+                    return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+
+                clone.SetEVs(spread);
+                clone.SetDefaultNickname();
+                clone.RefreshChecksum();
+                return (clone, swap, swap1, swap2, PokeTradeResult.Success);
+            } else
+            {
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
-
-            if (spread.Sum() > maxEV)
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
-
-            clone.SetEVs(spread);
-            clone.SetDefaultNickname();
-            clone.RefreshChecksum();
-            return (clone, swap, PokeTradeResult.Success);
         }
 
-        private (PK9 clone, string tradeType, PokeTradeResult check) HandleItemSwap(PK9 clone, PK9 offered, CancellationToken token)
+        private (PK9 clone, PokeTradeResult check) HandleSecondEVSwap(PK9 clone, PK9 pk2)
         {
-            var swap = "Item";
+            int i; int j = 0;
+            int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
+            int maxEV = 510;
+            if (pk2.Nickname.Length == 12)
+            {
+                List<string> nickHexValues = new();
+                for (i = 0; i < 12; i += 2)
+                {
+                    nickHexValues.Add(pk2.Nickname.Substring(i, 2));
+                }
+                foreach (string f in nickHexValues)
+                {
+                    if (f == "NN")
+                        spread[j++] = 0;
+                    else if (f == "SS")
+                        spread[j] = clone.GetEV(j++);
+                    else
+                    {
+                        int EVValue = Convert.ToInt32(f, 16);
+                        if (EVValue > 252)
+                            EVValue = 252;
+                        spread[j++] = EVValue;
+                    }
+                }
+
+                if (spread.Sum() > maxEV)
+                    return (pk2, PokeTradeResult.TrainerRequestBad);
+
+                clone.SetEVs(spread);
+                clone.SetDefaultNickname();
+                clone.RefreshChecksum();
+                return (clone, PokeTradeResult.Success);
+            }
+            else
+            {
+                return (pk2, PokeTradeResult.TrainerRequestBad);
+            }
+
+        }
+
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleItemSwap(PK9 clone, PK9 offered)
+        {
+            string swap = "Item", swap1 = "", swap2 = "";
             bool isParsable = short.TryParse(clone.Nickname, out short itemID);
             if (!isParsable)
             {
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
             itemID -= 1;
             Log($"User is requesting item {GameInfo.GetStrings(1).Item[itemID]}");
             bool canHold = ItemRestrictions.IsHeldItemAllowed(itemID, clone.Context);
             if (!canHold)
             {
-                return (offered, swap, PokeTradeResult.TrainerRequestBad);
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
             clone.HeldItem = itemID;
             clone.RefreshChecksum();
-            return (clone, swap, PokeTradeResult.Success);
+            return (clone, swap, swap1, swap2, PokeTradeResult.Success);
 
         }
 
@@ -1134,8 +1221,8 @@ namespace SysBot.Pokemon
                 clone.Tracker = 0;
 
             PokeTradeResult update;
-            string tradeType;
-            (clone, tradeType, update)  = GetCloneSwapInfo(clone, offered, token);
+            string tradeType, swap1, swap2;
+            (clone, tradeType, swap1, swap2, update)  = GetCloneSwapInfo(clone, offered);
             if (update != PokeTradeResult.Success)
                 return (offered, PokeTradeResult.TrainerRequestBad);
 
@@ -1158,6 +1245,17 @@ namespace SysBot.Pokemon
                 return (offered, PokeTradeResult.TrainerTooSlow);
             }
 
+            if (tradeType == "Double" || tradeType == "EV")
+            {
+                bool doubleEV = offered.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && offered.Nickname.Length == 12 && pk2.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && pk2.Nickname.Length == 12;
+                if (doubleEV)
+                {
+                    (clone, update) = HandleSecondEVSwap(clone, pk2);
+                    if (update != PokeTradeResult.Success)
+                        return (offered, PokeTradeResult.TrainerRequestBad);
+                }
+            }
+
             await Click(A, 0_800, token).ConfigureAwait(false);
             await SetBoxPokemonAbsolute(BoxStartOffset, clone, token, sav).ConfigureAwait(false);
 
@@ -1165,12 +1263,42 @@ namespace SysBot.Pokemon
                 Hub.Config.Trade.AddCompletedBallSwaps();
             if (tradeType == "Tera")
                 Hub.Config.Trade.AddCompletedTeraSwaps();
-            if (tradeType == "Double")
-                Hub.Config.Trade.AddCompletedDoubleSwaps();
             if (tradeType == "Item")
                 Hub.Config.Trade.AddCompletedItemSwaps();
             if (tradeType == "EV")
                 Hub.Config.Trade.AddCompletedEVSwaps();
+            if (tradeType == "Double")
+            {
+                switch (swap1)
+                {
+                    case "Tera":
+                        Hub.Config.Trade.AddCompletedTeraSwaps();
+                        break;
+
+                    case "Ball":
+                        Hub.Config.Trade.AddCompletedBallSwaps();
+                        break;
+
+                    case "EV":
+                        Hub.Config.Trade.AddCompletedEVSwaps();
+                        break;
+                }
+
+                switch (swap2)
+                {
+                    case "Tera":
+                        Hub.Config.Trade.AddCompletedTeraSwaps();
+                        break;
+
+                    case "Ball":
+                        Hub.Config.Trade.AddCompletedBallSwaps();
+                        break;
+
+                    case "EV":
+                        Hub.Config.Trade.AddCompletedEVSwaps();
+                        break;
+                }
+            }
             return (clone, PokeTradeResult.Success);
         }
 
