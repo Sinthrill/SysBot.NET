@@ -457,7 +457,7 @@ namespace SysBot.Pokemon
 
                 if (multiTrade < Hub.Config.Distribution.TradesPerEncounter)
                 {
-                    await Task.Delay(11_000, token).ConfigureAwait(false);
+                    await Task.Delay(Hub.Config.Timings.ExtraTimeMultiTrade, token).ConfigureAwait(false);
                 }
             }
 
@@ -867,6 +867,8 @@ namespace SysBot.Pokemon
                 
                 info = itemString[0];
             }
+            if (clone.HeldItem == 63)
+                swap = "Name";
             if (evNickname || evHexNickname)
             {
                 if (swap == "")
@@ -885,6 +887,7 @@ namespace SysBot.Pokemon
                 (swap1, info2, swap2, swap) = CheckDoubleSwap(swap, offered.Nickname);
             return swap switch
             {
+                "Name" => HandleNameRemove(clone, offered),
                 "Tera" => HandleTeraSwap(info, clone, offered),
                 "Ball" => HandleBallSwap(info, clone, offered),
                 "Double" => HandleDoubleSwap(info, swap1, info2, swap2, clone, offered),
@@ -1034,6 +1037,16 @@ namespace SysBot.Pokemon
                 Log(e.Message);
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
+        }
+
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleNameRemove(PK9 clone, PK9 offered)
+        {
+            string swap = "Name", swap1 = "", swap2 = "";
+            if (offered.Met_Location == 30001)
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+            clone.SetDefaultNickname();
+            clone.RefreshChecksum();
+            return (clone, swap, swap1, swap2, PokeTradeResult.Success);
         }
 
         private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleEVSwap(PK9 clone, PK9 offered)
@@ -1267,6 +1280,8 @@ namespace SysBot.Pokemon
                 Hub.Config.Trade.AddCompletedItemSwaps();
             if (tradeType == "EV")
                 Hub.Config.Trade.AddCompletedEVSwaps();
+            if (tradeType == "Name")
+                Hub.Config.Trade.AddCompletedNameRemoves();
             if (tradeType == "Double")
             {
                 switch (swap1)

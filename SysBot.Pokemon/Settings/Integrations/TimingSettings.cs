@@ -68,6 +68,9 @@ namespace SysBot.Pokemon
         [Category(Misc), Description("[SV] Extra time in milliseconds to wait for the Poké Portal to load.")]
         public int ExtraTimeLoadPortal { get; set; } = 1000;
 
+        [Category(Misc), Description("Extra time in milliseconds to wait for the trade animation to finish before returning to box for second trade.")]
+        public int ExtraTimeMultiTrade { get; set; } = 10000;
+
         [Category(Misc), Description("Extra time in milliseconds to wait for the box to load after finding a trade.")]
         public int ExtraTimeOpenBox { get; set; } = 1000;
 

@@ -3,6 +3,7 @@ using PKHeX.Core;
 using System.ComponentModel;
 using System.Threading;
 using SysBot.Base;
+using System;
 
 namespace SysBot.Pokemon
 {
@@ -54,6 +55,7 @@ namespace SysBot.Pokemon
         private int _completedDoubleSwaps;
         private int _completedItemSwaps;
         private int _completedEVSwaps;
+        private int _completedNameRemoves;
 
         [Category(Counts), Description("Completed Surprise Trades")]
         public int CompletedSurprise
@@ -97,6 +99,27 @@ namespace SysBot.Pokemon
             set => _completedDumps = value;
         }
 
+        [Category(Counts), Description("Completed Item Swap Trades")]
+        public int CompletedItemSwaps
+        {
+            get => _completedItemSwaps;
+            set => _completedItemSwaps = value;
+        }
+
+        [Category(Counts), Description("Completed Name Remove Trades")]
+        public int CompletedNameRemoves
+        {
+            get => _completedNameRemoves;
+            set => _completedNameRemoves = value;
+        }
+
+        [Category(Counts), Description("Completed Double Swap Trades")]
+        public int CompletedDoubleSwaps
+        {
+            get => _completedDoubleSwaps;
+            set => _completedDoubleSwaps = value;
+        }
+
         [Category(Counts), Description("Completed Tera Swap Trades")]
         public int CompletedTeraSwaps
         {
@@ -109,20 +132,6 @@ namespace SysBot.Pokemon
         {
             get => _completedBallSwaps;
             set => _completedBallSwaps = value;
-        }
-
-        [Category(Counts), Description("Completed Double Swap Trades")]
-        public int CompletedDoubleSwaps
-        {
-            get => _completedDoubleSwaps;
-            set => _completedDoubleSwaps = value;
-        }
-
-        [Category(Counts), Description("Completed Item Swap Trades")]
-        public int CompletedItemSwaps
-        {
-            get => _completedItemSwaps;
-            set => _completedItemSwaps = value;
         }
 
         [Category(Counts), Description("Completed EV Swap Trades")]
@@ -146,6 +155,7 @@ namespace SysBot.Pokemon
         public void AddCompletedDoubleSwaps() => Interlocked.Increment(ref _completedDoubleSwaps);
         public void AddCompletedItemSwaps() => Interlocked.Increment(ref _completedItemSwaps);
         public void AddCompletedEVSwaps() => Interlocked.Increment(ref _completedEVSwaps);
+        public void AddCompletedNameRemoves() => Interlocked.Increment(ref _completedNameRemoves);
 
         public IEnumerable<string> GetNonZeroCounts()
         {
@@ -163,14 +173,16 @@ namespace SysBot.Pokemon
                 yield return $"Distribution Trades: {CompletedDistribution}";
             if (CompletedSurprise != 0)
                 yield return $"Surprise Trades: {CompletedSurprise}";
+            if (CompletedItemSwaps != 0)
+                yield return $"Item Swaps: {CompletedItemSwaps}";
+            if (CompletedNameRemoves != 0)
+                yield return $"Name Removes: {CompletedNameRemoves}";
+            if (CompletedDoubleSwaps != 0)
+                yield return $"Double Swaps: {CompletedDoubleSwaps}";
             if (CompletedTeraSwaps!= 0)
                 yield return $"Tera Swaps: {CompletedTeraSwaps}";
             if (CompletedBallSwaps != 0)
                 yield return $"Ball Swaps: {CompletedBallSwaps}";
-            if (CompletedDoubleSwaps != 0)
-                yield return $"Double Swaps: {CompletedDoubleSwaps}";
-            if (CompletedItemSwaps != 0)
-                yield return $"Item Swaps: {CompletedItemSwaps}";
             if (CompletedEVSwaps != 0)
                 yield return $"EV Swaps: {CompletedEVSwaps}";
         }
