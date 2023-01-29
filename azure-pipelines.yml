@@ -42,13 +42,12 @@ steps:
     rootFolderOrFile: 'SysBot.Pokemon.WinForms\bin\x64\Release\net47'
     includeRootFolder: true
     archiveType: 'zip'
-    archiveFile: 'SysBot.Pokemon.WinForms\bin\x64\Release\net47\SysSwapBot.zip'
+    archiveFile: 'SysSwapBot.zip'
     replaceExistingArchive: true
 
-- task: PublishPipelineArtifact@1
+- task: PublishBuildArtifacts@1
   displayName: 'Publish Artifact: SysSwapBot-x64'
   inputs:
-    PathtoPublish: 'SysBot.Pokemon.WinForms\bin\x64\Release\net47\SysSwapBot.zip'
+    PathtoPublish: 'SysSwapBot.zip'
     ArtifactName: SysSwapBot-x64
-    publishLocation: 'pipeline'
   condition: succeededOrFailed()
