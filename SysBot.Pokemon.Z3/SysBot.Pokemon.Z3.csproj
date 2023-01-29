@@ -24,7 +24,7 @@
     <Otherwise>
       <!-- x86 specific references -->
       <ItemGroup>
-        <PackageReference Include="Microsoft.Z3.x86" Version="4.8.7" />
+        <PackageReference Include="Microsoft.Z3.x86" Version="4.8.15" />
       </ItemGroup>
     </Otherwise>
   </Choose>

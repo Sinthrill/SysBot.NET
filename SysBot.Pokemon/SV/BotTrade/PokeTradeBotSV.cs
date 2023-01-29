@@ -849,10 +849,10 @@ namespace SysBot.Pokemon
             string info = "";
             bool evNickname = offered.Nickname.All(c => "M0SA".Contains(c)) && offered.Nickname.Length == 6;
             bool evHexNickname = offered.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && offered.Nickname.Length == 12;
+            bool evReset = offered.Nickname == "Reset";
             string item = GameInfo.GetStrings(1).Item[clone.HeldItem];
             if (clone.HeldItem == 17)
             {
-                Log("Clone request is requesting an item swap");
                 swap = "Item";
             }
             if (clone.HeldItem != 0 && clone.HeldItem != 17 && swap == "")
@@ -862,23 +862,43 @@ namespace SysBot.Pokemon
                 {
                     swap = itemString[1];
                     if (swap != "Ball" && swap != "Tera")
-                        swap = "";
+                        swap = "";                       
                 }
                 
                 info = itemString[0];
             }
             if (clone.HeldItem == 63)
+            {
                 swap = "Name";
-            if (evNickname || evHexNickname)
+            }
+            if (evNickname || evHexNickname || evReset)
             {
                 if (swap == "")
-                {
-                    Log("Clone request is requesting an EV spread");
+                {                    
                     swap = "EV";
                 }
             }
+            switch (swap)
+            {
+                case "Ball":
+                    Log($"Clone request is requesting {info} Ball.");
+                    break;
+                case "Tera":
+                    Log($"Clone request is requesting {info} Tera.");
+                    break;
+                case "EV":
+                    Log($"Clone request is requesting an EV spread of {offered.Nickname}.");
+                    break;
+                case "Name":
+                    Log("Clone request is requesting a Nickname removal.");
+                    break;
+                case "Item":
+                    Log("Clone request is requesting a held item.");
+                    break;
+                default:
+                    break;
+            }
 
-            Log($"Clone request is holding a {item}");
 
             string info2 = "";
             string swap2 = "";
@@ -899,13 +919,19 @@ namespace SysBot.Pokemon
 
         private (string swap1, string info2, string swap2, string swap) CheckDoubleSwap(string swap, string nickname)
         {
-            Log($"Clone request is named {nickname}");
             if (swap == "Ball")
             {
                 bool EVSwap = nickname.All(c => "M0SA".Contains(c)) && nickname.Length == 6;
                 bool EVHexSwap = nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && nickname.Length == 12;
-                if (EVSwap || EVHexSwap)
+                bool EVReset = nickname == "Reset";
+                if (EVSwap || EVHexSwap || EVReset)
+                {
+                    Log($"Clone request is requesting EVs {nickname} as well");
                     return (swap, nickname, "EV", "Double");
+                }
+
+                if (nickname.All(c => "0123456789".Contains(c)))
+                    return (swap, "None", "None", swap);
 
                 MoveType a;
                 try
@@ -913,6 +939,7 @@ namespace SysBot.Pokemon
                     if (nickname == "Any")
                         return (swap, "None", "None", swap);
                     a = (MoveType)Enum.Parse(typeof(MoveType), nickname);
+                    Log($"Clone request is requesting {nickname} Tera as well");
                     return (swap, nickname, "Tera", "Double");
                 }
                 catch (Exception e)
@@ -924,8 +951,15 @@ namespace SysBot.Pokemon
             {
                 bool EVSwap = nickname.All(c => "M0SA".Contains(c)) && nickname.Length == 6;
                 bool EVHexSwap = nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && nickname.Length == 12;
-                if (EVSwap || EVHexSwap)
+                bool EVReset = nickname == "Reset";
+                if (EVSwap || EVHexSwap || EVReset)
+                {
+                    Log($"Clone request is requesting EVs {nickname} as well");
                     return (swap, nickname, "EV", "Double");
+                }
+
+                if (nickname.All(c => "0123456789".Contains(c)))
+                    return (swap, "None", "None", swap);
 
                 Ball b;
                 if (nickname == "Poké")
@@ -936,6 +970,7 @@ namespace SysBot.Pokemon
                     if (nickname == "None")
                         return(swap, "None", "None", swap);
                     b = (Ball)Enum.Parse(typeof(Ball), nickname);
+                    Log($"Clone request is requesting {nickname} Ball as well");
                     return (swap, nickname, "Ball", "Double");
                 }
                 catch (Exception e)
@@ -1006,19 +1041,35 @@ namespace SysBot.Pokemon
             if (clone.Species > 905 && clone.Species < 915)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
+            //Handle Cherish Balls not being available
+            if (ball == "Cherish")
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+
+            //Handle items with Ball as second word that aren't actually Balls
             if (offered.FatefulEncounter || ball == "Smoke" || ball == "Iron" || ball == "Light")
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
+            //Handle Balls that aren't released yet in SV
+            if (ball == "Sport" || ball == "Safari")
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+
+            //Handle LA Balls until Home support
+            if (ball == "LAPoke" || ball == "LAGreat" || ball == "LAUltra" || ball == "LAFeather" || ball == "LAWing" || ball == "LAJet" || ball == "LAHeavy" || ball == "LALeaden" || ball == "LAGigaton" || ball == "LAOrigin")
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
+
+            //In-game trades from NPCs can't have Balls swapped
             if (offered.Met_Location == 30001)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
+            //GMeowth from Salvatore can't have Ball swapped
             if (offered.Met_Location == 130 || offered.Met_Location == 131)
                 if (offered.Met_Level == 5)
                     return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
+            //Master balls don't breed down
             if (offered.WasEgg)
             {
-                if (ball == "Master" || ball == "Cherish")
+                if (ball == "Master")
                     return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
 
@@ -1258,7 +1309,7 @@ namespace SysBot.Pokemon
                 return (offered, PokeTradeResult.TrainerTooSlow);
             }
 
-            if (tradeType == "Double" || tradeType == "EV")
+            if (swap1 == "EV" || tradeType == "EV" || swap2 == "EV")
             {
                 bool doubleEV = offered.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && offered.Nickname.Length == 12 && pk2.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && pk2.Nickname.Length == 12;
                 if (doubleEV)
@@ -1284,6 +1335,8 @@ namespace SysBot.Pokemon
                 Hub.Config.Trade.AddCompletedNameRemoves();
             if (tradeType == "Double")
             {
+                Hub.Config.Trade.AddCompletedDoubleSwaps();
+
                 switch (swap1)
                 {
                     case "Tera":
