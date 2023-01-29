@@ -40,5 +40,5 @@ steps:
   displayName: 'Publish Artifact: SysBot-x64'
   inputs:
     PathtoPublish: 'SysBot.Pokemon.WinForms\bin\x64\Release\net47'
-    ArtifactName: SysBot-x64
+    ArtifactName: SysSwapBot-x64
   condition: succeededOrFailed()
