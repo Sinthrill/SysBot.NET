@@ -65,8 +65,8 @@ namespace SysBot.Pokemon
 
         // Store the current save's OT and TID/SID for comparison.
         private string OT = string.Empty;
-        private int DisplaySID;
-        private int DisplayTID;
+        private uint DisplaySID;
+        private uint DisplayTID;
 
         // Stores whether we returned all the way to the overworld, which repositions the cursor.
         private bool StartFromOverworld = true;
@@ -128,7 +128,8 @@ namespace SysBot.Pokemon
                 }
                 catch (SocketException e)
                 {
-                    Connection.LogError(e.StackTrace);
+                    if (e.StackTrace != null)
+                        Connection.LogError(e.StackTrace);
                     var attempts = Hub.Config.Timings.ReconnectAttempts;
                     var delay = Hub.Config.Timings.ExtraReconnectDelay;
                     var protocol = Config.Connection.Protocol;
@@ -666,7 +667,8 @@ namespace SysBot.Pokemon
             if (await IsConnectedOnline(ConnectedOffset, token).ConfigureAwait(false))
                 return true;
 
-            await Click(L, 5_000, token).ConfigureAwait(false);
+            await Click(L, 1_000, token).ConfigureAwait(false);
+            await Click(A, 4_000, token).ConfigureAwait(false);
 
             var wait = 0;
             while (!await IsConnectedOnline(ConnectedOffset, token).ConfigureAwait(false))
@@ -810,6 +812,14 @@ namespace SysBot.Pokemon
 
                 ctr++;
                 var msg = Hub.Config.Trade.DumpTradeLegalityCheck ? verbose : $"File {ctr}";
+
+                // Extra information about trainer data for people requesting with their own trainer data.
+                var ot = pk.OT_Name;
+                var ot_gender = pk.OT_Gender == 0 ? "Male" : "Female";
+                var tid = pk.GetDisplayTID().ToString(pk.GetTrainerIDFormat().GetTrainerIDFormatStringTID());
+                var sid = pk.GetDisplaySID().ToString(pk.GetTrainerIDFormat().GetTrainerIDFormatStringSID());
+                msg += $"\n**Trainer Data**\n```OT: {ot}\nOTGender: {ot_gender}\nTID: {tid}\nSID: {sid}```";
+
                 // Extra information for shiny eggs, because of people dumping to skip hatching.
                 var eggstring = pk.IsEgg ? "Egg " : string.Empty;
                 msg += pk.IsShiny ? $"\n**This Pokémon {eggstring}is shiny!**" : string.Empty;
@@ -1112,7 +1122,7 @@ namespace SysBot.Pokemon
             }
         }
 
-        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleNameRemove(PK9 clone, PK9 offered)
+        private static (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleNameRemove(PK9 clone, PK9 offered)
         {
             string swap = "Name", swap1 = "", swap2 = "";
             if (offered.Met_Location == 30001)
@@ -1122,7 +1132,7 @@ namespace SysBot.Pokemon
             return (clone, swap, swap1, swap2, PokeTradeResult.Success);
         }
 
-        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleEVSwap(PK9 clone, PK9 offered)
+        private static (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleEVSwap(PK9 clone, PK9 offered)
         {
             string swap = "EV", swap1 = "", swap2 = "";
             int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
@@ -1219,7 +1229,7 @@ namespace SysBot.Pokemon
             }
         }
 
-        private (PK9 clone, PokeTradeResult check) HandleSecondEVSwap(PK9 clone, PK9 pk2)
+        private static (PK9 clone, PokeTradeResult check) HandleSecondEVSwap(PK9 clone, PK9 pk2)
         {
             int i; int j = 0;
             int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
@@ -1295,7 +1305,7 @@ namespace SysBot.Pokemon
             return (clone, "None", swap1, swap2, PokeTradeResult.Success);
         }
 
-        private ushort Base36ToUShort(string convert)
+        private static ushort Base36ToUShort(string convert)
         {
             int tbase = 36;
             ushort b10 = (ushort)convert
@@ -1392,7 +1402,9 @@ namespace SysBot.Pokemon
                 _ => genderChar == 'M' ? 0 : 1,
             };
 
-            string genderLog = Enum.GetName(typeof(Gender), reqGender);
+            string? genderLog = Enum.GetName(typeof(Gender), reqGender);
+            if (genderLog is null)
+                return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);            
             string genderSet = reqGender switch
             {
                 1 => " (F)\r\n",
@@ -1443,8 +1455,8 @@ namespace SysBot.Pokemon
                 showdownSet += "IVs: " + ReqIVs + "\r\n";
             showdownSet += "Language: " + Enum.GetName(typeof(LanguageID), offered.Language) + "\r\n";
             showdownSet += "OT: " + offered.OT_Name + "\r\n";
-            showdownSet += "TID: " + offered.TrainerID7 + "\r\n";
-            showdownSet += "SID: " + offered.TrainerSID7 + "\r\n";
+            showdownSet += "TID: " + offered.DisplayTID + "\r\n";
+            showdownSet += "SID: " + offered.DisplaySID + "\r\n";
             showdownSet += "OTGender: " + offered.OT_Gender + "\r\n";
             string boxVersionCheck = species switch
             {
@@ -1509,7 +1521,7 @@ namespace SysBot.Pokemon
                 return (offered, PokeTradeResult.IllegalTrade);
             }
 
-            var clone = (PK9)offered.Clone();
+            var clone = offered.Clone();
             if (Hub.Config.Legality.ResetHOMETracker)
                 clone.Tracker = 0;
 
@@ -1701,6 +1713,7 @@ namespace SysBot.Pokemon
             bool quit = false;
             var user = poke.Trainer;
             bool isDistribution = false;
+            string msg = "";
             if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
                 isDistribution = true;
             var useridmsg = isDistribution ? "" : $" ({user.ID})";
@@ -1716,7 +1729,7 @@ namespace SysBot.Pokemon
                 if (cd != 0 && TimeSpan.FromMinutes(cd) > delta)
                 {
                     poke.Notifier.SendNotification(this, poke, "You have ignored the trade cooldown set by the bot owner. The owner has been notified.");
-                    var msg = $"Found {TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
+                    msg = $"Found {TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
                     list.TryRegister(TrainerNID, TrainerName);
                     if (AbuseSettings.EchoNintendoOnlineIDCooldown)
                         msg += $"\nID: {TrainerNID}";
@@ -1742,7 +1755,7 @@ namespace SysBot.Pokemon
                         quit = true;
                     }
 
-                    var msg = $"Found {user.TrainerName}{useridmsg} sending to multiple in-game players. Previous OT: {previousEncounter.Name}, Current OT: {TrainerName}";
+                    msg = $"Found {user.TrainerName}{useridmsg} sending to multiple in-game players. Previous OT: {previousEncounter.Name}, Current OT: {TrainerName}";
                     if (AbuseSettings.EchoNintendoOnlineIDMultiRecipients)
                         msg += $"\nID: {TrainerNID}";
                     if (!string.IsNullOrWhiteSpace(AbuseSettings.MultiRecipientEchoMention))
@@ -1757,11 +1770,10 @@ namespace SysBot.Pokemon
             // Try registering the partner in our list of recently seen.
             // Get back the details of their previous interaction.
             var previous = list.TryGetPrevious(TrainerNID);
-
             if (previous != null && previous.NetworkID != TrainerNID && !isDistribution)
             {
                 var delta = DateTime.Now - previous.Time;
-                if (delta > TimeSpan.FromMinutes(AbuseSettings.TradeAbuseExpiration) && AbuseSettings.TradeAbuseAction != TradeAbuseAction.Ignore)
+                if (delta < TimeSpan.FromMinutes(AbuseSettings.TradeAbuseExpiration) && AbuseSettings.TradeAbuseAction != TradeAbuseAction.Ignore)
                 {
                     if (AbuseSettings.TradeAbuseAction == TradeAbuseAction.BlockAndQuit)
                     {
@@ -1771,7 +1783,7 @@ namespace SysBot.Pokemon
                     quit = true;
                 }
 
-                var msg = $"Found {user.TrainerName}{useridmsg} using multiple accounts.\nPreviously encountered {previous.Name} ({previous.RemoteID}) {delta.TotalMinutes:F1} minutes ago on OT: {TrainerName}.";
+                msg = $"Found {user.TrainerName}{useridmsg} using multiple accounts.\nPreviously encountered {previous.Name} ({previous.RemoteID}) {delta.TotalMinutes:F1} minutes ago on OT: {TrainerName}.";
                 if (AbuseSettings.EchoNintendoOnlineIDMulti)
                     msg += $"\nID: {TrainerNID}";
                 if (!string.IsNullOrWhiteSpace(AbuseSettings.MultiAbuseEchoMention))
@@ -1785,7 +1797,7 @@ namespace SysBot.Pokemon
             var entry = AbuseSettings.BannedIDs.List.Find(z => z.ID == TrainerNID);
             if (entry != null)
             {
-                var msg = $"{user.TrainerName}{useridmsg} is a banned user, and was encountered in-game using OT: {TrainerName}.";
+                msg = $"{user.TrainerName}{useridmsg} is a banned user, and was encountered in-game using OT: {TrainerName}.";
                 if (!string.IsNullOrWhiteSpace(entry.Comment))
                     msg += $"\nUser was banned for: {entry.Comment}";
                 if (!string.IsNullOrWhiteSpace(AbuseSettings.BannedIDMatchEchoMention))

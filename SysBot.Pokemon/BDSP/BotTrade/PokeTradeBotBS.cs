@@ -106,7 +106,8 @@ namespace SysBot.Pokemon
                 }
                 catch (SocketException e)
                 {
-                    Connection.LogError(e.StackTrace);
+                    if (e.StackTrace != null)
+                        Connection.LogError(e.StackTrace);
                     var attempts = Hub.Config.Timings.ReconnectAttempts;
                     var delay = Hub.Config.Timings.ExtraReconnectDelay;
                     var protocol = Config.Connection.Protocol;
@@ -670,6 +671,14 @@ namespace SysBot.Pokemon
 
                 ctr++;
                 var msg = Hub.Config.Trade.DumpTradeLegalityCheck ? verbose : $"File {ctr}";
+
+                // Extra information about trainer data for people requesting with their own trainer data.
+                var ot = pk.OT_Name;
+                var ot_gender = pk.OT_Gender == 0 ? "Male" : "Female";
+                var tid = pk.GetDisplayTID().ToString(pk.GetTrainerIDFormat().GetTrainerIDFormatStringTID());
+                var sid = pk.GetDisplaySID().ToString(pk.GetTrainerIDFormat().GetTrainerIDFormatStringSID());
+                msg += $"\n**Trainer Data**\n```OT: {ot}\nOTGender: {ot_gender}\nTID: {tid}\nSID: {sid}```";
+
                 // Extra information for shiny eggs, because of people dumping to skip hatching.
                 var eggstring = pk.IsEgg ? "Egg " : string.Empty;
                 msg += pk.IsShiny ? $"\n**This Pokémon {eggstring}is shiny!**" : string.Empty;
@@ -844,10 +853,10 @@ namespace SysBot.Pokemon
             var previous = isDistribution
                 ? list.TryRegister(TrainerNID, TrainerName)
                 : list.TryRegister(TrainerNID, TrainerName, poke.Trainer.ID);
-            if (previous != null && previous.NetworkID != TrainerNID && !isDistribution)
+            if (previous != null && previous.NetworkID == TrainerNID && previous.RemoteID != user.ID && !isDistribution)
             {
                 var delta = DateTime.Now - previous.Time;
-                if (delta > TimeSpan.FromMinutes(AbuseSettings.TradeAbuseExpiration) && AbuseSettings.TradeAbuseAction != TradeAbuseAction.Ignore)
+                if (delta < TimeSpan.FromMinutes(AbuseSettings.TradeAbuseExpiration) && AbuseSettings.TradeAbuseAction != TradeAbuseAction.Ignore)
                 {
                     if (AbuseSettings.TradeAbuseAction == TradeAbuseAction.BlockAndQuit)
                     {

@@ -53,7 +53,7 @@ namespace SysBot.Pokemon
         [Category(Misc), Description("Number of times to attempt reconnecting to a socket connection after a connection is lost. Set this to -1 to try indefinitely.")]
         public int ReconnectAttempts { get; set; } = 30;
 
-        [Category(Misc), Description("Extra time in milliseconds to wait between attempts to reconnect.")]
+        [Category(Misc), Description("Extra time in milliseconds to wait between attempts to reconnect. Base time is 30 seconds.")]
         public int ExtraReconnectDelay { get; set; }
 
         [Category(Misc), Description("[BDSP] Extra time in milliseconds to wait for the overworld to load after leaving the Union Room.")]

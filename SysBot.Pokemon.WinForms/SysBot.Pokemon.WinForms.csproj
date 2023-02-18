@@ -1,8 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFrameworks>net47;net6.0-windows</TargetFrameworks>
+    <TargetFramework>net7.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWindowsForms>true</UseWindowsForms>
     <PackageId>SysBot.Pokemon.WinForms</PackageId>
     <Company>Project Pokémon</Company>
@@ -12,17 +13,24 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <StartupObject>SysBot.Pokemon.WinForms.Program</StartupObject>
     <AssemblyName>SysBot</AssemblyName>
-    <LangVersion>9</LangVersion>
     <Version>01.00.00</Version>
-    <Nullable>enable</Nullable>
     <Platforms>x64</Platforms>
     <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <DebugType>portable</DebugType>
+    <EmbedAllSources>true</EmbedAllSources>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
-    <PackageReference Include="PKHeX.Core" Version="22.12.19" />
-    <PackageReference Include="System.Resources.Extensions" Version="5.0.0" />
+    <PackageReference Include="PKHeX.Core" Version="23.1.30" />
+    <PackageReference Include="System.Resources.Extensions" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,15 +42,7 @@
     <ProjectReference Include="..\SysBot.Pokemon.Z3\SysBot.Pokemon.Z3.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="$(TargetFramework.StartsWith('net4')) AND '$(Configuration)' == 'Release' ">
-    <PackageReference Include="Costura.Fody" Version="4.1.0" />
-    <PackageReference Include="Fody" Version="6.0.5">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup Condition="$(TargetFramework.StartsWith('net4'))">
+  <ItemGroup>
     <Reference Include="PKHeX.Drawing">
       <HintPath>deps\PKHeX.Drawing.dll</HintPath>
     </Reference>

@@ -40,13 +40,14 @@ namespace SysBot.Base
             if (Connected)
                 Disconnect();
 
+            // Socket will update "Connected" condition itself based on the success of the most recent read/write call.
+            // We want to ensure we initialize the Socket if we're resetting after a crash.
             InitializeSocket();
             Log("Connecting to device...");
             var address = Dns.GetHostAddresses(ip);
             foreach (IPAddress adr in address)
             {
                 IPEndPoint ep = new(adr, Info.Port);
-                Log("Connected!");
                 try
                 {
                     Connection.Connect(ep);
@@ -55,6 +56,7 @@ namespace SysBot.Base
                 {
                     return;
                 }
+                Log("Connected!");
             }
         }
 
