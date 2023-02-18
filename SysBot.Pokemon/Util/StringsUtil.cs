@@ -21,6 +21,14 @@ namespace SysBot.Pokemon
             return string.Concat(sanitized.Select(char.ToLower));
         }
 
+        public static string UseAnOrNot(string input)
+        {
+            char firstChar = input[0];
+            bool isVowel = "aeiouAEIOU".IndexOf(firstChar) >= 0;
+            string article = isVowel ? "an" : "a";
+            return article + " " + input;
+        }
+
         private static readonly char[] Blacklist = { '.', '\\', '/', ',', '*', ';', '．', '・', '。' };
         private static readonly string[] TLD = { "tv", "gg", "yt" };
         private static readonly string[] TLD2 = { "com", "org", "net" };

@@ -56,6 +56,8 @@ namespace SysBot.Pokemon
         private int _completedItemSwaps;
         private int _completedEVSwaps;
         private int _completedNameRemoves;
+        private int _completedDistroSwaps;
+        private int _completedGennedSwaps;
 
         [Category(Counts), Description("Completed Surprise Trades")]
         public int CompletedSurprise
@@ -141,6 +143,20 @@ namespace SysBot.Pokemon
             set => _completedEVSwaps = value;
         }
 
+        [Category(Counts), Description("Completed Distribution Swap Trades")]
+        public int CompletedDistroSwaps
+        {
+            get => _completedDistroSwaps;
+            set =>_completedDistroSwaps = value;
+        }
+
+        [Category(Counts), Description("Completed Genned Swap Trades")]
+        public int CompletedGennedSwaps
+        {
+            get => _completedGennedSwaps;
+            set => _completedGennedSwaps = value;
+        }
+
         [Category(Counts), Description("When enabled, the counts will be emitted when a status check is requested.")]
         public bool EmitCountsOnStatusCheck { get; set; }
 
@@ -156,6 +172,8 @@ namespace SysBot.Pokemon
         public void AddCompletedItemSwaps() => Interlocked.Increment(ref _completedItemSwaps);
         public void AddCompletedEVSwaps() => Interlocked.Increment(ref _completedEVSwaps);
         public void AddCompletedNameRemoves() => Interlocked.Increment(ref _completedNameRemoves);
+        public void AddCompletedDistroSwaps() => Interlocked.Increment(ref _completedDistroSwaps);
+        public void AddCompletedGennedSwaps() => Interlocked.Increment(ref _completedGennedSwaps);
 
         public IEnumerable<string> GetNonZeroCounts()
         {
@@ -177,6 +195,10 @@ namespace SysBot.Pokemon
                 yield return $"Item Swaps: {CompletedItemSwaps}";
             if (CompletedNameRemoves != 0)
                 yield return $"Name Removes: {CompletedNameRemoves}";
+            if (CompletedDistroSwaps != 0)
+                yield return $"Distro Swaps: {CompletedDistroSwaps}";
+            if (CompletedGennedSwaps != 0)
+                yield return $"Genned Swaps: {CompletedGennedSwaps}";
             if (CompletedDoubleSwaps != 0)
                 yield return $"Double Swaps: {CompletedDoubleSwaps}";
             if (CompletedTeraSwaps!= 0)

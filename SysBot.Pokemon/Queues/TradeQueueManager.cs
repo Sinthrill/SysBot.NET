@@ -59,7 +59,7 @@ namespace SysBot.Pokemon
         public bool TryDequeueClone(out PokeTradeDetail<T> detail, bool force = false)
         {
             detail = default!;
-            var cfg = Hub.Config.Distribution;
+            var cfg = Hub.Config.Clone;
             if (!cfg.CloneWhileIdle && !force)
                 return false;
 

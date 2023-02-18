@@ -34,6 +34,10 @@ namespace SysBot.Pokemon
         [TypeConverter(typeof(ExpandableObjectConverter))]
         public DistributionSettings Distribution { get; set; } = new();
 
+        [Category(BotTrade), Description("Settings for idle clone trades.")]
+        [TypeConverter(typeof(ExpandableObjectConverter))]
+        public CloneSettings Clone { get; set; } = new();
+
         [Category(BotTrade)]
         [TypeConverter(typeof(ExpandableObjectConverter))]
         public SeedCheckSettings SeedCheckSWSH { get; set; } = new();
