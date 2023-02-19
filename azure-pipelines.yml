@@ -16,7 +16,7 @@ pool:
 variables:
   Solution: '**/*.sln'
   Platform: 'x64'
-  Runtime: 'win-x64'
+  Project: '**/SysBot.Pokemon.WinForms.csproj'
   Configuration: 'Publish'
 
 steps:
@@ -25,27 +25,17 @@ steps:
 - task: NuGetCommand@2
   inputs:
     command: 'restore'
-    restoreSolution: '**/*.sln'
+    restoreSolution: $(Solution)
     
-- task: DotNetCoreCLI@2
+- task: VSBuild@1
   inputs:
-    command: 'restore'
-    
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'publish'
-    publishWebProjects: false
-    projects: '**/SysBot.Pokemon.WinForms/SysBot.Pokemon.WinForms.csproj'
-    zipAfterPublish: true
-    arguments: -p:PublishProfile=FolderProfile -c $(Configuration) -r $(Runtime)
-    feedsToUse: 'select'
-    includeNuGetOrg: true
-    versioningScheme: 'off'
+    solution: '$(Project)'
+    msbuildArgs: '/t:restore;rebuild;publish /p:Configuration=$(Configuration);Platform=$(Platform);PublishSingleFile=true;PublishReadyToRun=true;OutputPath=$(Build.ArtifactStagingDirectory)\'
     
 
-- task: PublishPipelineArtifact@0
+- task: PublishPipelineArtifact@1
   displayName: 'Publish Artifact: SysSwapBot-x64'
   inputs:
-    targetPath: 'SysBot.Pokemon.WinForms/bin/x64/Publish/net7.0-windows/win-x64/publish/'
-    artifactName: SysSwapBot-x64
+    TargetPath: '$(Build.ArtifactStagingDirectory\publish\'
+    ArtifactName: SysSwapBot-x64
   condition: succeededOrFailed()
