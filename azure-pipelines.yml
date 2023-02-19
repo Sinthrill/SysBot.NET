@@ -36,6 +36,6 @@ steps:
 - task: PublishPipelineArtifact@1
   displayName: 'Publish Artifact: SysSwapBot-x64'
   inputs:
-    TargetPath: '$(Build.ArtifactStagingDirectory\publish\'
+    TargetPath: '$(Build.ArtifactStagingDirectory)\publish\'
     ArtifactName: SysSwapBot-x64
   condition: succeededOrFailed()
