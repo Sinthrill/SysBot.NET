@@ -16,7 +16,8 @@ pool:
 variables:
   Solution: '**/*.sln'
   Platform: 'x64'
-  Configuration: 'Release'
+  Runtime: 'win-x64'
+  Configuration: 'Publish'
 
 steps:
 - task: NuGetToolInstaller@1
@@ -29,25 +30,22 @@ steps:
 - task: DotNetCoreCLI@2
   inputs:
     command: 'restore'
-
-- task: VSBuild@1
+    
+- task: DotNetCoreCLI@2
   inputs:
-    solution: '$(Solution)'
-    platform: '$(Platform)'
-    configuration: '$(Configuration)'
+    command: 'publish'
+    publishWebProjects: false
+    projects: '**/SysBot.Pokemon.WinForms/SysBot.Pokemon.WinForms.csproj'
+    zipAfterPublish: true
+    arguments: -p:PublishProfile=FolderProfile -c $(Configuration) -r $(Runtime)
+    feedsToUse: 'select'
+    includeNuGetOrg: true
+    versioningScheme: 'off'
+    
 
-- task: ArchiveFiles@2
-  displayName: 'Archive Artifact: SysSwapBot-x64'
-  inputs:
-    rootFolderOrFile: 'SysBot.Pokemon.WinForms\bin\x64\Release\net47'
-    includeRootFolder: true
-    archiveType: 'zip'
-    archiveFile: 'SysSwapBot.zip'
-    replaceExistingArchive: true
-
-- task: PublishBuildArtifacts@1
+- task: PublishPipelineArtifact@0
   displayName: 'Publish Artifact: SysSwapBot-x64'
   inputs:
-    PathtoPublish: 'SysSwapBot.zip'
-    ArtifactName: SysSwapBot-x64
+    targetPath: '**/SysBot.Pokemon.WinForms/bin/Release/Publish/*.zip'
+    artifactName: SysSwapBot-x64
   condition: succeededOrFailed()

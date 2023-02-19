@@ -4,6 +4,8 @@
     <TargetFramework>net7.0</TargetFramework>
     <LangVersion>11</LangVersion>
     <Nullable>enable</Nullable>
+    <Configurations>Debug;Release;Publish</Configurations>
+	<DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>

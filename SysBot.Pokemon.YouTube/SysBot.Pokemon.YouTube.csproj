@@ -1,5 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Configurations>Debug;Release;Publish</Configurations>
+	<DebugType>embedded</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Google.Apis" Version="1.59.0" />
     <PackageReference Include="Google.Apis.Auth" Version="1.59.0" />

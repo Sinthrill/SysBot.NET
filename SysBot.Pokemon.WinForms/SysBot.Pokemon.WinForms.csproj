@@ -16,12 +16,12 @@
     <Version>01.00.00</Version>
     <Platforms>x64</Platforms>
     <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
+    <Configurations>Debug;Release;Publish</Configurations>
   </PropertyGroup>
 
   <PropertyGroup>
-    <DebugType>portable</DebugType>
+    <DebugType>embedded</DebugType>
     <EmbedAllSources>true</EmbedAllSources>
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <PublishReadyToRun>true</PublishReadyToRun>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>

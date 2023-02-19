@@ -1460,8 +1460,8 @@ namespace SysBot.Pokemon
             showdownSet += "OTGender: " + offered.OT_Gender + "\r\n";
             string boxVersionCheck = species switch
             {
-                998 => ".Version=50\r\n",
-                999 => ".Version=51\r\n",
+                (ushort)Species.Koraidon => ".Version=50\r\n",
+                (ushort)Species.Miraidon => ".Version=51\r\n",
                 _ => ".Version=" + offered.Version + "\r\n",
             };
             showdownSet += boxVersionCheck;
@@ -1486,7 +1486,7 @@ namespace SysBot.Pokemon
                 DumpPokemon(DumpSetting.DumpFolder, "genToConvert", dumpPKM);
             if (pkm is not PK9 pk || !la.Valid)
             {
-                var reason = result == "Timeout" ? $"That {specName} set took too long to generate." : $"I wasn't able to create a {specName} from that set.";
+                var reason = result == "Timeout" ? $"That {specName} set took too long to generate." : $"I wasn't able to create {StringsUtil.UseAnOrNot(specName)} from that set.";
                 Log(reason);
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             }
@@ -1534,7 +1534,7 @@ namespace SysBot.Pokemon
             if (tradeType != "Distro" && tradeType != "Genned")
             {
                 poke.SendNotification(this, $"**Cloned your {GameInfo.GetStrings(1).Species[clone.Species]}!**\nNow press B to cancel your offer and trade me a Pokémon you don't want.");
-                Log($"Cloned a {GameInfo.GetStrings(1).Species[clone.Species]}. Waiting for user to change their Pokémon...");
+                Log($"Cloned {StringsUtil.UseAnOrNot(GameInfo.GetStrings(1).Species[clone.Species])}. Waiting for user to change their Pokémon...");
             }
             else if (tradeType == "Distro")
             {

@@ -4,6 +4,8 @@
     <OutputType>Exe</OutputType>
     <Platforms>x64</Platforms>
     <StartupObject>SysBot.Pokemon.ConsoleApp.Program</StartupObject>
+    <Configurations>Debug;Release;Publish</Configurations>
+	<DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>

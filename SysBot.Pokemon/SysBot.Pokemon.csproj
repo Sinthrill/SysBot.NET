@@ -1,5 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <Configurations>Debug;Release;Publish</Configurations>
+	<DebugType>embedded</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="PKHeX.Core" Version="23.1.30" />
     <ProjectReference Include="..\SysBot.Base\SysBot.Base.csproj" />

@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <Platforms>x64</Platforms>
+    <Configurations>Debug;Release;Publish</Configurations>
+	<DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
