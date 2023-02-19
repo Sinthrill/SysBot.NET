@@ -46,6 +46,6 @@ steps:
 - task: PublishPipelineArtifact@0
   displayName: 'Publish Artifact: SysSwapBot-x64'
   inputs:
-    targetPath: '**/SysBot.Pokemon.WinForms/bin/Release/Publish/*.zip'
+    targetPath: '**/SysBot.Pokemon.WinForms/bin/x64/Publish/net7.0-windows/win-x64/publish/*.zip'
     artifactName: SysSwapBot-x64
   condition: succeededOrFailed()
