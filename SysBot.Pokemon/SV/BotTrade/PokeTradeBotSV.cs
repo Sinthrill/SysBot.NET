@@ -1070,6 +1070,9 @@ namespace SysBot.Pokemon
         {
             string swap = "Ball", swap1 = "", swap2 = "";
             Ball b;
+            if (ball is "Smoke" or "Iron" or "Light")
+                return (offered, "", swap1, swap2, PokeTradeResult.Success);
+
             if (offered.Species > 905 && offered.Species < 915)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
@@ -1078,7 +1081,7 @@ namespace SysBot.Pokemon
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
             //Handle items with Ball as second word that aren't actually Balls
-            if (offered.FatefulEncounter || ball is "Smoke" or "Iron" or "Light")
+            if (offered.FatefulEncounter)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
             //Handle Balls that aren't released yet in SV
@@ -1434,7 +1437,7 @@ namespace SysBot.Pokemon
                     else
                         j = Base36ToUShort(c.ToString());
                     if (j < 31)
-                        ReqIVs += j + " " + ivTitles[i] + " ";
+                        ReqIVs += j + " " + ivTitles[i] + " / ";
                     i++;
                 }
             }
@@ -1466,6 +1469,7 @@ namespace SysBot.Pokemon
             };
             showdownSet += boxVersionCheck;
             showdownSet += "~=Generation=9\r\n";
+            showdownSet += "~!Location=30024\r\n";
             showdownSet += ".Moves=$suggest";
             showdownSet = showdownSet.Replace("`\n", "").Replace("\n`", "").Replace("`", "").Trim();
             var set = new ShowdownSet(showdownSet);
