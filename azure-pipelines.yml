@@ -15,27 +15,29 @@ pool:
 
 variables:
   Solution: '**/*.sln'
-  Platform: 'x64'
   Project: '**/SysBot.Pokemon.WinForms.csproj'
-  Configuration: 'Publish'
+  Platform: 'x64'
+  Configuration: 'Release'
 
 steps:
 - task: NuGetToolInstaller@1
+  inputs:
+    versionSpec: '5.8.0'
 
 - task: NuGetCommand@2
   inputs:
     command: 'restore'
-    restoreSolution: $(Solution)
-    
+    restoreSolution: '$(Solution)'
+
 - task: VSBuild@1
   inputs:
     solution: '$(Project)'
-    msbuildArgs: '/t:restore;rebuild;publish /p:Configuration=$(Configuration);Platform=$(Platform);PublishSingleFile=true;PublishReadyToRun=true;OutputPath=$(Build.ArtifactStagingDirectory)\'
-    
+    msbuildArgs: '/t:restore;rebuild;publish 
+    /p:Configuration=$(Configuration);Platform=$(Platform);PublishSingleFile=true;OutputPath=$(Build.ArtifactStagingDirectory)\'
 
 - task: PublishPipelineArtifact@1
-  displayName: 'Publish Artifact: SysSwapBot-x64'
+  displayName: 'Publish Artifact: SysBot-x64'
   inputs:
     TargetPath: '$(Build.ArtifactStagingDirectory)\publish\'
-    ArtifactName: SysSwapBot-x64
+    ArtifactName: SysBot-x64
   condition: succeededOrFailed()
