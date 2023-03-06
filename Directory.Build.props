@@ -7,7 +7,7 @@
     <NeutralLanguage>en</NeutralLanguage>
     <SelfContained>false</SelfContained>
     <PackageAsSingleFile>true</PackageAsSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
     <SourceRevisionId>$([System.DateTime]::UtcNow.ToString("yyMMddHHmmss"))</SourceRevisionId>
   </PropertyGroup>
 

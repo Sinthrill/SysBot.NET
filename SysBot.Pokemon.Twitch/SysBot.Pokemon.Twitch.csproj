@@ -5,7 +5,7 @@
     <LangVersion>11</LangVersion>
     <Nullable>enable</Nullable>
     <Configurations>Debug;Release;Publish</Configurations>
-	<DebugType>portable</DebugType>
+	<DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
