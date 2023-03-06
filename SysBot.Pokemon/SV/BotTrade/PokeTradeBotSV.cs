@@ -1451,6 +1451,11 @@ namespace SysBot.Pokemon
                 }
             }
 
+            bool raidOnly = false;
+
+            if (species == (ushort)Species.WalkingWake || species == (ushort)Species.IronLeaves)
+                raidOnly = true;
+
             var sav = TrainerSettings.GetSavedTrainerData(GameVersion.SV, 9);
 
             // Generate basic Showdown Set information
@@ -1478,7 +1483,8 @@ namespace SysBot.Pokemon
             };
             showdownSet += boxVersionCheck;
             showdownSet += "~=Generation=9\r\n";
-            showdownSet += "~!Location=30024\r\n";
+            if (!raidOnly)
+                showdownSet += "~!Location=30024\r\n";
             showdownSet += ".Moves=$suggest";
             showdownSet = showdownSet.Replace("`\n", "").Replace("\n`", "").Replace("`", "").Trim();
             var set = new ShowdownSet(showdownSet);
