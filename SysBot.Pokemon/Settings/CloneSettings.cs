@@ -2,6 +2,7 @@
 using SysBot.Base;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Threading;
 
 namespace SysBot.Pokemon
 {
@@ -10,6 +11,8 @@ namespace SysBot.Pokemon
         private const string Clone = nameof(Clone);
         private const string Synchronize = nameof(Synchronize);
         public override string ToString() => "Clone Trade Settings";
+
+        private int _showdownSetLog;
 
         // Distribute
 
@@ -36,6 +39,15 @@ namespace SysBot.Pokemon
 
         [Category(Clone), Description("Held item used to trigger Genning.")]
         public LegalHeld9 GennedSwapItem { get; set; } = LegalHeld9.FreshWater;
+
+        [Category(Clone), Description("Counter for genned set logging.")]
+        public int SetLogCount
+        {
+            get => _showdownSetLog;
+            set => _showdownSetLog = value;
+        }
+
+        public void AddGennedSetLog() => Interlocked.Increment(ref _showdownSetLog);
 
         // Synchronize
 
