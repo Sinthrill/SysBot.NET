@@ -1467,6 +1467,8 @@ namespace SysBot.Pokemon
 
             var sav = TrainerSettings.GetSavedTrainerData(GameVersion.SV, 9);
 
+            string genderOTSet = offered.OT_Gender == 0 ? "Male" : "Female";
+
             // Generate basic Showdown Set information
             string showdownSet = "";
             showdownSet += specName;
@@ -1483,7 +1485,7 @@ namespace SysBot.Pokemon
             showdownSet += "OT: " + offered.OT_Name + "\r\n";
             showdownSet += "TID: " + offered.DisplayTID + "\r\n";
             showdownSet += "SID: " + offered.DisplaySID + "\r\n";
-            showdownSet += "OTGender: " + offered.OT_Gender + "\r\n";
+            showdownSet += "OTGender: " + genderOTSet + "\r\n";
             string boxVersionCheck = species switch
             {
                 (ushort)Species.Koraidon => ".Version=50\r\n",
