@@ -9,6 +9,54 @@ namespace SysBot.Pokemon.Discord
 {
     public class SudoModule : ModuleBase<SocketCommandContext>
     {
+        [Command("cooldown")]
+        [Summary("Changes cooldown in minutes.")]
+        [RequireSudo]
+        public async Task UpdateCooldown([Remainder] string input)
+        {
+            bool res = uint.TryParse(input, out var cooldown);
+            if (res)
+            {
+                SysCordSettings.HubConfig.TradeAbuse.TradeCooldown = cooldown;
+                await ReplyAsync($"Cooldown has been updated to {cooldown} minutes.").ConfigureAwait(false);
+            } else
+            {
+                await ReplyAsync("Please enter a valid number of minutes.").ConfigureAwait(false);
+            }
+        }
+
+        [Command("clonecode")]
+        [Summary("Changes trade code for idle cloning.")]
+        [RequireSudo]
+        public async Task ChangeCloneCode([Remainder] string input)
+        {
+            bool res = int.TryParse(input, out var code);
+            if (res)
+            {
+                SysCordSettings.HubConfig.Clone.TradeCode = code;
+                await ReplyAsync($"Idle cloning code has been changed to {code}.").ConfigureAwait(false);
+            } else
+            {
+                await ReplyAsync("Please enter a valid 1-8 digit number.").ConfigureAwait(false);
+            }
+        }
+
+        [Command("distrocode")]
+        [Summary("Changes trade code for idle distribution.")]
+        [RequireSudo]
+        public async Task ChangeDistroCode([Remainder] string input)
+        {
+            bool res = int.TryParse(input, out var code);
+            if (res)
+            {
+                SysCordSettings.HubConfig.Distribution.TradeCode = code;
+                await ReplyAsync($"Idle distribution code has been changed to {code}.").ConfigureAwait(false);
+            } else
+            {
+                await ReplyAsync("Please enter a valid 1-8 digit number.").ConfigureAwait(false);
+            }
+        }
+
         [Command("blacklist")]
         [Summary("Blacklists mentioned user.")]
         [RequireSudo]

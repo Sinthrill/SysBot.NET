@@ -1526,6 +1526,10 @@ namespace SysBot.Pokemon
             }
             pk.HyperTrainClear();
             pk.ResetPartyStats();
+            if (pk.WasEgg)
+            {
+                pk.Met_Location = 50;
+            }
             pk.MarkValue = 0;
             pk.HT_Name = "Sinthrill";
             pk.HT_Language = 2;
