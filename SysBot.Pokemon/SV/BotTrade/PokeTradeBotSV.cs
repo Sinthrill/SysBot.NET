@@ -29,6 +29,7 @@ namespace SysBot.Pokemon
         private static readonly TrackedUserLog PreviousUsers = new();
         private static readonly TrackedUserLog PreviousUsersDistribution = new();
         private static readonly TrackedUserLog EncounteredUsers = new();
+        private static readonly CooldownTracker UserCooldowns = new();
         private static readonly Random rnd = new();
 
         /// <summary>
@@ -351,6 +352,7 @@ namespace SysBot.Pokemon
 
             var tradePartner = await GetTradePartnerInfo(token).ConfigureAwait(false);
             var trainerNID = await GetTradePartnerNID(TradePartnerNIDOffset, token).ConfigureAwait(false);
+            var trainer = new PartnerDataHolderSV(trainerNID, tradePartner);
             RecordUtil<PokeTradeBot>.Record($"Initiating\t{trainerNID:X16}\t{tradePartner.TrainerName}\t{poke.Trainer.TrainerName}\t{poke.Trainer.ID}\t{poke.ID}\t{toSend.EncryptionConstant:X8}");
             Log($"Found Link Trade partner: {tradePartner.TrainerName}-{tradePartner.TID7} (ID: {trainerNID})");
 
@@ -366,6 +368,7 @@ namespace SysBot.Pokemon
             if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
                 isDistribution = true;
             var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
+            var listCool = UserCooldowns;
 
             poke.SendNotification(this, $"Found Link Trade partner: {tradePartner.TrainerName}. Waiting for a Pokémon...");
 
@@ -407,7 +410,6 @@ namespace SysBot.Pokemon
                 }
 
                 PokeTradeResult update;
-                var trainer = new PartnerDataHolder(0, tradePartner.TrainerName, tradePartner.TID7);
                 (toSend, update) = await GetEntityToSend(sav, poke, offered, oldEC, toSend, trainer, token).ConfigureAwait(false);
                 if (update != PokeTradeResult.Success)
                 {
@@ -466,6 +468,7 @@ namespace SysBot.Pokemon
             }
 
             list.TryRegister(trainerNID, tradePartner.TrainerName);
+            _ = listCool.TryInsert(trainerNID, tradePartner.TrainerName, true);
 
             await ExitTradeToPortal(false, token).ConfigureAwait(false);
             return PokeTradeResult.Success;
@@ -855,7 +858,7 @@ namespace SysBot.Pokemon
             return new TradePartnerSV(trader_info);
         }
 
-        protected virtual async Task<(PK9 toSend, PokeTradeResult check)> GetEntityToSend(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, byte[] oldEC, PK9 toSend, PartnerDataHolder partnerID, CancellationToken token)
+        protected virtual async Task<(PK9 toSend, PokeTradeResult check)> GetEntityToSend(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, byte[] oldEC, PK9 toSend, PartnerDataHolderSV partnerID, CancellationToken token)
         {
             return poke.Type switch
             {
@@ -865,7 +868,7 @@ namespace SysBot.Pokemon
             };
         }
 
-        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) GetCloneSwapInfo(PK9 clone, PK9 offered)
+        private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) GetCloneSwapInfo(PK9 clone, PK9 offered, PartnerDataHolderSV partner)
         {
             var config = Hub.Config.Clone;
             string swap = "";
@@ -954,7 +957,7 @@ namespace SysBot.Pokemon
                 "Item" => HandleItemSwap(clone, offered),
                 "EV" => HandleEVSwap(clone, offered),
                 "Distro" => HandleDistroSwap(clone, offered),
-                "Genned" => HandleGennedSwap(offered),
+                "Genned" => HandleGennedSwap(offered, partner),
                 _ => (clone, swap, swap1, swap2, PokeTradeResult.Success),
             };
         }
@@ -1080,9 +1083,11 @@ namespace SysBot.Pokemon
         {
             string swap = "Ball", swap1 = "", swap2 = "";
             Ball b;
+            //Handle items with Ball as second word that aren't actually Balls
             if (ball is "Smoke" or "Iron" or "Light")
                 return (offered, "", swap1, swap2, PokeTradeResult.Success);
 
+            //Handle Paldea starters not being legal in other balls
             if (offered.Species > 905 && offered.Species < 915)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
@@ -1090,7 +1095,7 @@ namespace SysBot.Pokemon
             if (ball is "Cherish")
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
-            //Handle items with Ball as second word that aren't actually Balls
+            //Handle Event Pokemon
             if (offered.FatefulEncounter)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
 
@@ -1138,7 +1143,7 @@ namespace SysBot.Pokemon
         private static (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleNameRemove(PK9 clone, PK9 offered)
         {
             string swap = "Name", swap1 = "", swap2 = "";
-            if (offered.Met_Location == 30001)
+            if (offered.Met_Location == 30001 || offered.FatefulEncounter)
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
             clone.SetDefaultNickname();
             clone.RefreshChecksum();
@@ -1242,51 +1247,38 @@ namespace SysBot.Pokemon
             }
         }
 
-        private static (PK9 clone, PokeTradeResult check) HandleSecondEVSwap(PK9 clone, PK9 pk2, string tradeType = "EV")
+        private static (PK9 clone, PokeTradeResult check) HandleSecondEVSwap(PK9 clone, PK9 pk2)
         {
             int i; int j = 0;
             int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
             int maxEV = 510;
-            if (pk2.Nickname.Length == 12)
+            List<string> nickHexValues = new();
+            for (i = 0; i < 12; i += 2)
             {
-                List<string> nickHexValues = new();
-                for (i = 0; i < 12; i += 2)
-                {
-                    nickHexValues.Add(pk2.Nickname.Substring(i, 2));
-                }
-                foreach (string f in nickHexValues)
-                {
-                    if (f == "NN")
-                        spread[j++] = 0;
-                    else if (f == "SS")
-                        spread[j] = clone.GetEV(j++);
-                    else
-                    {
-                        int EVValue = Convert.ToInt32(f, 16);
-                        if (EVValue > 252)
-                            EVValue = 252;
-                        spread[j++] = EVValue;
-                    }
-                }
-
-                if (spread.Sum() > maxEV)
-                {
-                    if (tradeType != "Genned")
-                        return (pk2, PokeTradeResult.TrainerRequestBad);
-                    else
-                        return (clone, PokeTradeResult.Success);
-                }
-
-                clone.SetEVs(spread);
-                clone.SetDefaultNickname();
-                clone.RefreshChecksum();
-                return (clone, PokeTradeResult.Success);
+                nickHexValues.Add(pk2.Nickname.Substring(i, 2));
             }
-            else
+            foreach (string f in nickHexValues)
             {
-                return (pk2, PokeTradeResult.TrainerRequestBad);
+                if (f == "NN")
+                    spread[j++] = 0;
+                else if (f == "SS")
+                    spread[j] = clone.GetEV(j++);
+                else
+                {
+                    int EVValue = Convert.ToInt32(f, 16);
+                    if (EVValue > 252)
+                        EVValue = 252;
+                    spread[j++] = EVValue;
+                }
             }
 
+            if (spread.Sum() > maxEV)
+                return (clone, PokeTradeResult.TrainerRequestBad);
+
+            clone.SetEVs(spread);
+            clone.SetDefaultNickname();
+            clone.RefreshChecksum();
+            return (clone, PokeTradeResult.Success);
         }
 
         private (PK9 clone, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleItemSwap(PK9 clone, PK9 offered)
@@ -1331,9 +1323,8 @@ namespace SysBot.Pokemon
                         .Aggregate(0, (pos, d) => pos * tbase + d);
             return b10;
         }
-
-        // Working on full genning support via nickname, commented until completed.
-        private (PK9 pk, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleGennedSwap(PK9 offered)
+        
+        private (PK9 pk, string tradeType, string swap1, string swap2, PokeTradeResult check) HandleGennedSwap(PK9 offered, PartnerDataHolderSV partner)
         {
             string swap = "Genned", swap1 = "", swap2 = "", nature, abiName, formName = "";
             int ability;
@@ -1467,7 +1458,7 @@ namespace SysBot.Pokemon
 
             var sav = TrainerSettings.GetSavedTrainerData(GameVersion.SV, 9);
 
-            string genderOTSet = offered.OT_Gender == 0 ? "Male" : "Female";
+            string genderOTSet = partner.Gender == 0 ? "Male" : "Female";
 
             // Generate basic Showdown Set information
             string showdownSet = "";
@@ -1481,16 +1472,16 @@ namespace SysBot.Pokemon
             showdownSet += nature + " Nature\r\n";
             if (ReqIVs != "")
                 showdownSet += "IVs: " + ReqIVs + "\r\n";
-            showdownSet += "Language: " + Enum.GetName(typeof(LanguageID), offered.Language) + "\r\n";
-            showdownSet += "OT: " + offered.OT_Name + "\r\n";
-            showdownSet += "TID: " + offered.DisplayTID + "\r\n";
-            showdownSet += "SID: " + offered.DisplaySID + "\r\n";
+            showdownSet += "Language: " + Enum.GetName(typeof(LanguageID), partner.Language) + "\r\n";
+            showdownSet += "OT: " + partner.TrainerName + "\r\n";
+            showdownSet += "TID: " + partner.TID7 + "\r\n";
+            showdownSet += "SID: " + partner.SID7 + "\r\n";
             showdownSet += "OTGender: " + genderOTSet + "\r\n";
             string boxVersionCheck = species switch
             {
                 (ushort)Species.Koraidon => ".Version=50\r\n",
                 (ushort)Species.Miraidon => ".Version=51\r\n",
-                _ => ".Version=" + offered.Version + "\r\n",
+                _ => ".Version=" + partner.Game + "\r\n",
             };
             showdownSet += boxVersionCheck;
             if (!staticScale)
@@ -1565,7 +1556,7 @@ namespace SysBot.Pokemon
             return (whole, remainder);
         }
 
-        private async Task<(PK9 toSend, PokeTradeResult check)> HandleClone(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, byte[] oldEC, PartnerDataHolder partner, CancellationToken token)
+        private async Task<(PK9 toSend, PokeTradeResult check)> HandleClone(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, byte[] oldEC, PartnerDataHolderSV partner, CancellationToken token)
         {
             if (Hub.Config.Discord.ReturnPKMs)
                 poke.SendNotification(this, offered, "Here's what you showed me!");
@@ -1591,7 +1582,7 @@ namespace SysBot.Pokemon
 
             PokeTradeResult update;
             string tradeType, swap1, swap2;
-            (clone, tradeType, swap1, swap2, update)  = GetCloneSwapInfo(clone, offered);
+            (clone, tradeType, swap1, swap2, update) = GetCloneSwapInfo(clone, offered, partner);
             if (update != PokeTradeResult.Success)
                 return (offered, PokeTradeResult.TrainerRequestBad);
 
@@ -1634,28 +1625,24 @@ namespace SysBot.Pokemon
                 return (offered, PokeTradeResult.TrainerTooSlow);
             }
 
-            if (swap1 == "EV" || tradeType == "EV" || swap2 == "EV")
-            {
-                bool doubleEV = offered.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && offered.Nickname.Length == 12 && pk2.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && pk2.Nickname.Length == 12;
-                if (doubleEV)
-                {
-                    (clone, update) = HandleSecondEVSwap(clone, pk2);
-                    if (update != PokeTradeResult.Success)
-                        return (offered, PokeTradeResult.TrainerRequestBad);
-                }
-            }
+            bool trashmonEV = pk2.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && pk2.Nickname.Length == 12;
+            bool trashEVFail = false;
 
-            if (tradeType == "Genned" && pk2.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && pk2.Nickname.Length == 12)
+            if (trashmonEV && !clone.IsEgg)
             {
-                (clone, update) = HandleSecondEVSwap(clone, pk2, tradeType);
+                Log($"Trashmon is also requesting EV spread of {pk2.Nickname}");
+                (clone, update) = HandleSecondEVSwap(clone, pk2);
                 if (update != PokeTradeResult.Success)
-                    return (offered, PokeTradeResult.TrainerRequestBad);
+                    trashEVFail = true;
             }
 
             poke.TradeData = clone;
 
             await Click(A, 0_800, token).ConfigureAwait(false);
             await SetBoxPokemonAbsolute(BoxStartOffset, clone, token, sav).ConfigureAwait(false);
+
+            if (!trashEVFail && tradeType != "EV" && swap1 != "EV" && swap2 != "EV")
+                TradeSettings.AddCompletedEVSwaps();
 
             switch (tradeType)
             {
@@ -1719,11 +1706,11 @@ namespace SysBot.Pokemon
             return (clone, PokeTradeResult.Success);
         }
 
-        private async Task<(PK9 toSend, PokeTradeResult check)> HandleRandomLedy(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, PK9 toSend, PartnerDataHolder partner, CancellationToken token)
+        private async Task<(PK9 toSend, PokeTradeResult check)> HandleRandomLedy(SAV9SV sav, PokeTradeDetail<PK9> poke, PK9 offered, PK9 toSend, PartnerDataHolderSV partner, CancellationToken token)
         {
             // Allow the trade partner to do a Ledy swap.
             var config = Hub.Config.Distribution;
-            var trade = Hub.Ledy.GetLedyTrade(offered, partner.TrainerOnlineID, config.LedySpecies);
+            var trade = Hub.Ledy.GetLedyTrade(offered, 0, config.LedySpecies);
             if (trade != null)
             {
                 if (trade.Type == LedyResponseType.AbuseDetected)
@@ -1809,11 +1796,14 @@ namespace SysBot.Pokemon
                 isDistribution = true;
             var useridmsg = isDistribution ? "" : $" ({user.ID})";
             var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
+            int attempts;
+            var listCool = UserCooldowns;
 
             var cooldown = list.TryGetPrevious(TrainerNID);
             if (cooldown != null)
             {
                 var delta = DateTime.Now - cooldown.Time;
+                var coolDelta = DateTime.Now - DateTime.ParseExact(AbuseSettings.CooldownUpdate, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
                 Log($"Last saw {TrainerName} {delta.TotalMinutes:F1} minutes ago (OT: {TrainerName}).");
 
                 var cd = AbuseSettings.TradeCooldown;
@@ -1827,6 +1817,16 @@ namespace SysBot.Pokemon
                     if (!string.IsNullOrWhiteSpace(AbuseSettings.CooldownAbuseEchoMention))
                         msg = $"{AbuseSettings.CooldownAbuseEchoMention} {msg}";
                     EchoUtil.Echo(msg);
+                    if (AbuseSettings.AutoBanCooldown && TimeSpan.FromMinutes(60) < coolDelta)
+                    {
+                        attempts = listCool.TryInsert(TrainerNID, TrainerName);
+                        Log($"Connection during cooldown number {attempts} for {TrainerName}.");
+                        if (attempts >= AbuseSettings.RepeatConnections)
+                        {
+                            AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "Cooldown Abuse Ban") });
+                            Log($"Added {TrainerName}-{TrainerNID} to the BannedIDs list for cooldown abuse.");
+                        }
+                    }
                     quit = true;
                 }
             }

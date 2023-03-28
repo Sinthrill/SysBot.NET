@@ -4,17 +4,24 @@ using PKHeX.Core;
 
 namespace SysBot.Pokemon
 {
-    public sealed class TradePartnerSV
+    public class TradePartnerSV
     {
         public string TID7 { get; }
         public string SID7 { get; }
         public string TrainerName { get; }
+
+        public int Game { get; }
+        public int Gender { get; }
+        public int Language { get; }
 
         public TradePartnerSV(TradeMyStatus info)
         {
             TID7 = info.DisplayTID.ToString("D6");
             SID7 = info.DisplaySID.ToString("D4");
             TrainerName = info.OT;
+            Game = info.Game;
+            Gender = info.Gender;
+            Language = info.Language;
         }
     }
 

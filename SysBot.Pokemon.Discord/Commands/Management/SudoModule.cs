@@ -18,6 +18,7 @@ namespace SysBot.Pokemon.Discord
             if (res)
             {
                 SysCordSettings.HubConfig.TradeAbuse.TradeCooldown = cooldown;
+                SysCordSettings.HubConfig.TradeAbuse.CooldownUpdate = $"{DateTime.Now:yyyy.MM.dd - HH:mm:ss}";
                 await ReplyAsync($"Cooldown has been updated to {cooldown} minutes.").ConfigureAwait(false);
             } else
             {

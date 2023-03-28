@@ -10,6 +10,15 @@ namespace SysBot.Pokemon
         [Category(Monitoring), Description("When a person appears again in less than this setting's value (minutes), a notification will be sent.")]
         public double TradeCooldown { get; set; }
 
+        [Category(Monitoring), Description("Time cooldown last updated.")]
+        public string CooldownUpdate { get; set; } = string.Empty;
+
+        [Category(Monitoring), Description("When a person connects during cooldown consecutively, their NID is added to BannedIDs.")]
+        public bool AutoBanCooldown { get; set; } = false;
+
+        [Category(Monitoring), Description("Number of consecutive attempts to ban after.")]
+        public int RepeatConnections { get; set; } = 5;
+
         [Category(Monitoring), Description("When a person ignores a trade cooldown, the echo message will include their Nintendo Account ID.")]
         public bool EchoNintendoOnlineIDCooldown { get; set; } = true;
 
