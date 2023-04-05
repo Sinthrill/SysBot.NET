@@ -11,7 +11,7 @@ namespace SysBot.Pokemon
         public double TradeCooldown { get; set; }
 
         [Category(Monitoring), Description("Time cooldown last updated.")]
-        public string CooldownUpdate { get; set; } = string.Empty;
+        public string CooldownUpdate { get; set; } = "2023.03.25 - 00:00:00";
 
         [Category(Monitoring), Description("When a person connects during cooldown consecutively, their NID is added to BannedIDs.")]
         public bool AutoBanCooldown { get; set; } = false;

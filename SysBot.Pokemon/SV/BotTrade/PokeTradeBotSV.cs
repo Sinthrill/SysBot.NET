@@ -1626,14 +1626,14 @@ namespace SysBot.Pokemon
             }
 
             bool trashmonEV = pk2.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && pk2.Nickname.Length == 12;
-            bool trashEVFail = false;
+            bool trashEVFail = true;
 
             if (trashmonEV && !clone.IsEgg)
             {
                 Log($"Trashmon is also requesting EV spread of {pk2.Nickname}");
                 (clone, update) = HandleSecondEVSwap(clone, pk2);
-                if (update != PokeTradeResult.Success)
-                    trashEVFail = true;
+                if (update == PokeTradeResult.Success)
+                    trashEVFail = false;
             }
 
             poke.TradeData = clone;
