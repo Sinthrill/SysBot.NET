@@ -1510,7 +1510,7 @@ namespace SysBot.Pokemon
                 DumpPokemon(DumpSetting.DumpFolder, "genToConvert", dumpPKM);
             if (pkm is not PK9 pk || !la.Valid)
             {
-                var reason = result == "Timeout" ? $"That {specName} set took too long to generate." : result == "VersionMismatch" ? "Request refused: version mismatch." : $"I wasn't able to create a {specName} from that set.";
+                var reason = result == "Timeout" ? $"That {specName} set took too long to generate." : result == "VersionMismatch" ? "Request refused: PKHeX and Auto-Legality Mod version mismatch." : $"I wasn't able to create a {specName} from that set.";
                 Log(reason);
                 Log($"Refer to set number {Hub.Config.Clone.SetLogCount}.");
                 return (offered, swap, swap1, swap2, PokeTradeResult.TrainerRequestBad);
