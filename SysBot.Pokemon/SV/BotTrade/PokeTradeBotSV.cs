@@ -1918,14 +1918,20 @@ namespace SysBot.Pokemon
             {
                 bool hasExpired = DateTime.Now > isWhitelisted.Expiration;
                 if (hasExpired)
+                {
                     AbuseSettings.WhitelistIDs.List.Remove(isWhitelisted);
+                    Log($"{isWhitelisted.Name}({isWhitelisted.ID}) whitelist has expired.");
+                }
             }
 
             if (isBlacklisted != null)
             {
                 bool hasExpired = DateTime.Now > isBlacklisted.Expiration;
                 if (hasExpired)
+                {
                     AbuseSettings.BannedIDs.List.Remove(isBlacklisted);
+                    Log($"{isBlacklisted.Name}({isBlacklisted.ID}) blacklist has expired.");
+                }
             }
         }
 
