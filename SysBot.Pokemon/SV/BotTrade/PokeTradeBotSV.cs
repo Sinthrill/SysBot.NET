@@ -1916,7 +1916,7 @@ namespace SysBot.Pokemon
 
             if (isWhitelisted != null)
             {
-                bool hasExpired = DateTime.Now > isWhitelisted.Expiration;
+                bool hasExpired = DateTime.Now > DateTime.ParseExact(isWhitelisted.Expiration, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
                 if (hasExpired)
                 {
                     AbuseSettings.WhitelistIDs.List.Remove(isWhitelisted);
@@ -1926,7 +1926,7 @@ namespace SysBot.Pokemon
 
             if (isBlacklisted != null)
             {
-                bool hasExpired = DateTime.Now > isBlacklisted.Expiration;
+                bool hasExpired = DateTime.Now > DateTime.ParseExact(isBlacklisted.Expiration, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
                 if (hasExpired)
                 {
                     AbuseSettings.BannedIDs.List.Remove(isBlacklisted);

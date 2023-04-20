@@ -33,9 +33,9 @@ namespace SysBot.Pokemon.Discord
         [RequireSudo]
         public async Task WhitelistUser([Remainder] string input)
         {
-            string msg = "";
+            string msg = "", comment = "Default reasons";
             var argv = input.Split(", ");
-            DateTime expires = DateTime.Now;
+            DateTime expires = DateTime.Now;           
             bool isValidID = ulong.TryParse(argv[0], out ulong trainerNID);
             if (!isValidID)
             {
@@ -48,6 +48,7 @@ namespace SysBot.Pokemon.Discord
                 case 4:
                     var durArg = argv[2].Split(":", 2);
                     durArg[1] = durArg[1].ToLower();
+                    comment = argv[3];
                     bool isValidDur = int.TryParse(durArg[0], out int duration);
                     if (!isValidDur)
                     {
@@ -70,10 +71,11 @@ namespace SysBot.Pokemon.Discord
                     return;
             }
 
-            var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expires, Comment = argv[3] == String.Empty ? "default reasons." : argv[3] };                
+            string expiration = $"{expires:yyyy.MM.dd-hh:mm:ss}";
+            var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expiration, Comment = comment};                
 
             SysCordSettings.HubConfig.TradeAbuse.WhitelistIDs.AddIfNew(new[] { user });
-            msg += $"{user.Name}({user.ID}) has been added to the whitelist for {user.Comment}.";
+            msg += $"{user.Name}({user.ID}) has been added to the whitelist for \"{user.Comment}\".";
             await ReplyAsync(msg).ConfigureAwait(false);
         }
 
@@ -82,7 +84,7 @@ namespace SysBot.Pokemon.Discord
         [RequireSudo]
         public async Task BlacklistUser([Remainder] string input)
         {
-            string msg = "";
+            string msg = "", comment = "Default reasons";
             var argv = input.Split(", ");
             DateTime expires = DateTime.Now;
             bool isValidID = ulong.TryParse(argv[0], out ulong trainerNID);
@@ -97,6 +99,7 @@ namespace SysBot.Pokemon.Discord
                 case 4:
                     var durArg = argv[2].Split(":", 2);
                     durArg[1] = durArg[1].ToLower();
+                    comment = argv[3];
                     bool isValidDur = int.TryParse(durArg[0], out int duration);
                     if (!isValidDur)
                     {
@@ -120,10 +123,11 @@ namespace SysBot.Pokemon.Discord
                     return;
             }
 
-            var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expires, Comment = argv[3] == String.Empty ? "default reasons." : argv[3] };
+            string expiration = $"{expires:yyyy.MM.dd-hh:mm:ss}";
+            var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expiration, Comment = comment };
 
             SysCordSettings.HubConfig.TradeAbuse.BannedIDs.AddIfNew(new[] { user });
-            msg += $"{user.Name}({user.ID}) has been added to the blacklist for {user.Comment}.";
+            msg += $"{user.Name}({user.ID}) has been added to the blacklist for \"{user.Comment}\".";
             await ReplyAsync(msg).ConfigureAwait(false);
         }
 
