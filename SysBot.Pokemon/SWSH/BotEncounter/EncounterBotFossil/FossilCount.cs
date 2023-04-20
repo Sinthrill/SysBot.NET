@@ -28,14 +28,6 @@ namespace SysBot.Pokemon
                 Dino = count;
         }
 
-        private static readonly ushort[] Pouch_Treasure_SWSH =
-        {
-            086, 087, 088, 089, 090, 091, 092, 094, 106,
-            571, 580, 581, 582, 583,
-            795, 796,
-            1105, 1106, 1107, 1108,
-        };
-
         public static FossilCount GetFossilCounts(byte[] itemsBlock)
         {
             var pouch = GetTreasurePouch(itemsBlock);
@@ -52,7 +44,7 @@ namespace SysBot.Pokemon
 
         private static InventoryPouch8 GetTreasurePouch(byte[] itemsBlock)
         {
-            var pouch = new InventoryPouch8(InventoryType.MailItems, Pouch_Treasure_SWSH, 999, 0, 20);
+            var pouch = new InventoryPouch8(InventoryType.Treasure, ItemStorage8SWSH.Instance, 999, 0, 20);
             pouch.GetPouch(itemsBlock);
             return pouch;
         }
