@@ -46,6 +46,9 @@ namespace SysBot.Pokemon
         [Category(Monitoring), Description("If not empty, the provided string will be appended to Echo alerts to notify whomever you specify when a user is found sending to multiple players in-game. For Discord, use <@userIDnumber> to mention.")]
         public string MultiRecipientEchoMention { get; set; } = string.Empty;
 
+        [Category(Monitoring), Description("List of users that can ignore the trade cooldown.")]
+        public RemoteControlAccessList WhitelistIDs { get; set; } = new();
+
         [Category(Monitoring), Description("Banned online IDs that will trigger trade exit or in-game block.")]
         public RemoteControlAccessList BannedIDs { get; set; } = new();
 

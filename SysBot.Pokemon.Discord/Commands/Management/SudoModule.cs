@@ -4,10 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Discord;
+using PKHeX.Core;
 
 namespace SysBot.Pokemon.Discord
 {
-    public class SudoModule : ModuleBase<SocketCommandContext>
+    public class SudoModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new()
     {
         [Command("cooldown")]
         [Summary("Changes cooldown in minutes.")]
@@ -20,9 +21,146 @@ namespace SysBot.Pokemon.Discord
                 SysCordSettings.HubConfig.TradeAbuse.TradeCooldown = cooldown;
                 SysCordSettings.HubConfig.TradeAbuse.CooldownUpdate = $"{DateTime.Now:yyyy.MM.dd - HH:mm:ss}";
                 await ReplyAsync($"Cooldown has been updated to {cooldown} minutes.").ConfigureAwait(false);
+                return;
             } else
             {
                 await ReplyAsync("Please enter a valid number of minutes.").ConfigureAwait(false);
+            }
+        }
+
+        [Command("wluser")]
+        [Summary("Whitelist a user by NID. Format: <NID>, <Name>, <Duration:Days/Hours>, <Comment>")]
+        [RequireSudo]
+        public async Task WhitelistUser([Remainder] string input)
+        {
+            string msg = "";
+            var argv = input.Split(", ");
+            DateTime expires = DateTime.Now;
+            bool isValidID = ulong.TryParse(argv[0], out ulong trainerNID);
+            if (!isValidID)
+            {
+                await ReplyAsync($"{argv[0]} is not a valid NID.").ConfigureAwait(false);
+                return;
+            }
+
+            switch (argv.Length)
+            {
+                case 4:
+                    var durArg = argv[2].Split(":", 2);
+                    durArg[1] = durArg[1].ToLower();
+                    bool isValidDur = int.TryParse(durArg[0], out int duration);
+                    if (!isValidDur)
+                    {
+                        msg += $"{durArg[0]} is an invalid number. Defaulting to no expiration.\r\n";
+                        expires = DateTime.MaxValue;
+                    } else
+                    {
+                        expires = durArg[1] switch
+                        {
+                            "days" => expires.AddDays(duration),
+                            "hours" => expires.AddHours(duration),
+                            _ => expires.AddDays(duration),
+                        };
+                    }
+                    break;
+                case 2:
+                    break;
+                default:
+                    await ReplyAsync("Please use the proper format of <NID>, <Name>, <Duration:Days/Hours>, <Comment>").ConfigureAwait(false);
+                    return;
+            }
+
+            var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expires, Comment = argv[3] == String.Empty ? "default reasons." : argv[3] };                
+
+            SysCordSettings.HubConfig.TradeAbuse.WhitelistIDs.AddIfNew(new[] { user });
+            msg += $"{user.Name}({user.ID}) has been added to the whitelist for {user.Comment}.";
+            await ReplyAsync(msg).ConfigureAwait(false);
+        }
+
+        [Command("bluser")]
+        [Summary("Blacklist a user by NID. Format: <NID>, <Name>, <Duration:Days/Hours>, <Comment>")]
+        [RequireSudo]
+        public async Task BlacklistUser([Remainder] string input)
+        {
+            string msg = "";
+            var argv = input.Split(", ");
+            DateTime expires = DateTime.Now;
+            bool isValidID = ulong.TryParse(argv[0], out ulong trainerNID);
+            if (!isValidID)
+            {
+                await ReplyAsync($"{argv[0]} is not a valid NID.").ConfigureAwait(false);
+                return;
+            }
+
+            switch (argv.Length)
+            {
+                case 4:
+                    var durArg = argv[2].Split(":", 2);
+                    durArg[1] = durArg[1].ToLower();
+                    bool isValidDur = int.TryParse(durArg[0], out int duration);
+                    if (!isValidDur)
+                    {
+                        msg += $"{durArg[0]} is an invalid number. Defaulting to no expiration.\r\n";
+                        expires = DateTime.MaxValue;
+                    }
+                    else
+                    {
+                        expires = durArg[1] switch
+                        {
+                            "days" => expires.AddDays(duration),
+                            "hours" => expires.AddHours(duration),
+                            _ => expires.AddDays(duration),
+                        };
+                    }
+                    break;
+                case 2:
+                    break;
+                default:
+                    await ReplyAsync("Please use the proper format of <NID>, <Name>, <Duration:Days/Hours>, <Comment>").ConfigureAwait(false);
+                    return;
+            }
+
+            var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expires, Comment = argv[3] == String.Empty ? "default reasons." : argv[3] };
+
+            SysCordSettings.HubConfig.TradeAbuse.BannedIDs.AddIfNew(new[] { user });
+            msg += $"{user.Name}({user.ID}) has been added to the blacklist for {user.Comment}.";
+            await ReplyAsync(msg).ConfigureAwait(false);
+        }
+
+        [Command("ledyspecies")]
+        [Summary("Changes the Ledy species for idle distribution.")]
+        [RequireSudo]
+        public async Task ChangeLedySpecies([Remainder] string input)
+        {
+            if (input.ToLower() == "none")
+            {
+                SysCordSettings.HubConfig.Distribution.LedySpecies = (ushort)Species.None;
+                await ReplyAsync("LedySpecies has been changed to None.");
+                return;
+            }
+            bool isSpecies = Enum.TryParse(input, true, out Species result);            
+            if (!isSpecies)
+            {
+                await ReplyAsync("Please enter a valid Species.").ConfigureAwait(false);
+                return;
+            }
+            var mode = typeof(T).ToString();
+            IPersonalTable infoTable = mode switch
+            {
+                "PK9" => PersonalTable.SV,
+                "PK8" => PersonalTable.SWSH,
+                "PA8" => PersonalTable.LA,
+                "PB8" => PersonalTable.BDSP,
+                _ => PersonalTable.SV
+            };
+            bool isInGame = infoTable.IsSpeciesInGame((ushort)result);
+            if (!isInGame) 
+            {
+                await ReplyAsync("Please enter a Species available in the current game.").ConfigureAwait(false);
+                return;
+            } else {
+                SysCordSettings.HubConfig.Distribution.LedySpecies = result;
+                await ReplyAsync($"LedySpecies has been changed to {result}.");
             }
         }
 
@@ -36,6 +174,7 @@ namespace SysBot.Pokemon.Discord
             {
                 SysCordSettings.HubConfig.Clone.TradeCode = code;
                 await ReplyAsync($"Idle cloning code has been changed to {code}.").ConfigureAwait(false);
+                return;
             } else
             {
                 await ReplyAsync("Please enter a valid 1-8 digit number.").ConfigureAwait(false);
@@ -52,9 +191,28 @@ namespace SysBot.Pokemon.Discord
             {
                 SysCordSettings.HubConfig.Distribution.TradeCode = code;
                 await ReplyAsync($"Idle distribution code has been changed to {code}.").ConfigureAwait(false);
+                return;
             } else
             {
                 await ReplyAsync("Please enter a valid 1-8 digit number.").ConfigureAwait(false);
+            }
+        }
+
+        [Command("whitelist")]
+        [Summary("Whitelist an NID.")]
+        [RequireSudo]
+        public async Task WhiteListUser(string id, [Remainder] string name)
+        {
+            bool res = ulong.TryParse(id, out var userNID);
+            RemoteControlAccess user = new()
+            {
+                ID = userNID,
+                Name = name
+            };
+            if (res)
+            {
+                SysCordSettings.HubConfig.TradeAbuse.WhitelistIDs.AddIfNew(new[] { user });
+                await ReplyAsync($"NID {userNID} has been whitelisted under name {name}").ConfigureAwait(false);
             }
         }
 

@@ -1799,6 +1799,15 @@ namespace SysBot.Pokemon
             int attempts;
             var listCool = UserCooldowns;
 
+            CheckExpiration(TrainerNID);
+
+            var whitelisted = AbuseSettings.WhitelistIDs.List.Find(z => z.ID == TrainerNID);
+            if (whitelisted != null)
+            {
+                Log($"Encountered whitelisted user {whitelisted.Name} with ID {TrainerNID})");
+                return PokeTradeResult.Success;
+            }
+
             var cooldown = list.TryGetPrevious(TrainerNID);
             if (cooldown != null)
             {
@@ -1898,6 +1907,26 @@ namespace SysBot.Pokemon
             }
 
             return PokeTradeResult.Success;
+        }
+
+        private void CheckExpiration(ulong trainerNID)
+        {
+            var isWhitelisted = AbuseSettings.WhitelistIDs.List.Find(z => z.ID == trainerNID);
+            var isBlacklisted = AbuseSettings.BannedIDs.List.Find(z => z.ID == trainerNID);
+
+            if (isWhitelisted != null)
+            {
+                bool hasExpired = DateTime.Now > isWhitelisted.Expiration;
+                if (hasExpired)
+                    AbuseSettings.WhitelistIDs.List.Remove(isWhitelisted);
+            }
+
+            if (isBlacklisted != null)
+            {
+                bool hasExpired = DateTime.Now > isBlacklisted.Expiration;
+                if (hasExpired)
+                    AbuseSettings.BannedIDs.List.Remove(isBlacklisted);
+            }
         }
 
         private static RemoteControlAccess GetReference(string name, ulong id, string comment) => new()
