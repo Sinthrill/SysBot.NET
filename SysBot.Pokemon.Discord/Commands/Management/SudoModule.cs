@@ -71,7 +71,7 @@ namespace SysBot.Pokemon.Discord
                     return;
             }
 
-            string expiration = $"{expires:yyyy.MM.dd-hh:mm:ss}";
+            string expiration = $"{expires:yyyy.MM.dd - HH:mm:ss}";
             var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expiration, Comment = comment};                
 
             SysCordSettings.HubConfig.TradeAbuse.WhitelistIDs.AddIfNew(new[] { user });
@@ -123,7 +123,7 @@ namespace SysBot.Pokemon.Discord
                     return;
             }
 
-            string expiration = $"{expires:yyyy.MM.dd-hh:mm:ss}";
+            string expiration = $"{expires:yyyy.MM.dd - HH:mm:ss}";
             var user = new RemoteControlAccess { ID = trainerNID, Name = argv[1], Expiration = expiration, Comment = comment };
 
             SysCordSettings.HubConfig.TradeAbuse.BannedIDs.AddIfNew(new[] { user });
