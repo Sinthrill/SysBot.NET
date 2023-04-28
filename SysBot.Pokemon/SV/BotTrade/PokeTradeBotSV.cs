@@ -1832,7 +1832,9 @@ namespace SysBot.Pokemon
                         Log($"Connection during cooldown number {attempts} for {TrainerName}.");
                         if (attempts >= AbuseSettings.RepeatConnections)
                         {
-                            AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "Cooldown Abuse Ban") });
+                            DateTime expires = DateTime.Now.AddDays(2);
+                            string expiration = $"{expires:yyyy.MM.dd} - 23:59:59";
+                            AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "Cooldown Abuse Ban", expiration) });
                             Log($"Added {TrainerName}-{TrainerNID} to the BannedIDs list for cooldown abuse.");
                         }
                     }
@@ -1935,10 +1937,11 @@ namespace SysBot.Pokemon
             }
         }
 
-        private static RemoteControlAccess GetReference(string name, ulong id, string comment) => new()
+        private static RemoteControlAccess GetReference(string name, ulong id, string comment, string expiration = "9999.12.31 - 23:59:59") => new()
         {
             ID = id,
             Name = name,
+            Expiration = expiration,
             Comment = $"Added automatically on {DateTime.Now:yyyy.MM.dd - HH:mm:ss} ({comment})",
         };
     }
