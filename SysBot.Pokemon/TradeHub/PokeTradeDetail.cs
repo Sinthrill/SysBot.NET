@@ -1,4 +1,5 @@
 ﻿using PKHeX.Core;
+using SysBot.Pokemon.TradeHub;
 using System;
 using System.Threading;
 
@@ -33,6 +34,8 @@ namespace SysBot.Pokemon
         public readonly DateTime Time;
         /// <summary> Unique incremented ID </summary>
         public readonly int ID;
+
+        public CloneSwapInfoList? SwapInfoList;
 
         /// <summary> Indicates if the trade data should be synchronized with other bots. </summary>
         public bool IsSynchronized => Type == PokeTradeType.Random;
