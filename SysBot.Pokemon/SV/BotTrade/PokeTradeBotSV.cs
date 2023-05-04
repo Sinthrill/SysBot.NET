@@ -1198,7 +1198,7 @@ namespace SysBot.Pokemon
             int ability;
             ushort abiIndex, natureIndex;
             byte form;
-            bool shiny, hasForm = false;
+            bool lowLevel = false, shiny, hasForm = false;
             char genderChar, scaleChar;
             PokeTradeResult update;
             var s = GameInfo.Strings;
@@ -1222,7 +1222,7 @@ namespace SysBot.Pokemon
                     formName = AvailForms[form];
                     formInfo = PersonalTable.SV.GetFormEntry(species, form);
                 }
-                (shiny, abiIndex, genderChar, update) = ParseSGA(genInput[3]);
+                (lowLevel, shiny, abiIndex, genderChar, update) = ParseSGAL(genInput[3]);
                 if (update != PokeTradeResult.Success)
                     return (offered, PokeTradeResult.TrainerRequestBad);
                 if (hasForm)
@@ -1241,7 +1241,7 @@ namespace SysBot.Pokemon
                 nature = GameInfo.GetStrings(1).Natures[natureIndex];
             } else
             {
-                (shiny, abiIndex, genderChar, update) = ParseSGA(genInput[2]);
+                (lowLevel, shiny, abiIndex, genderChar, update) = ParseSGAL(genInput[2]);
                 if (update != PokeTradeResult.Success)
                     return (offered, PokeTradeResult.TrainerRequestBad);
                 abiName = GameInfo.GetStrings(1).Ability[PersonalTable.SV[species].GetAbilityAtIndex(abiIndex)];
@@ -1357,7 +1357,8 @@ namespace SysBot.Pokemon
             if (!raidOnly)            
                 showdownSet += "~!Location=30024\r\n";
             showdownSet += "~=Generation=9\r\n";
-            showdownSet += ".Moves=$suggest";
+            if (lowLevel)
+                showdownSet += ".CurrentLevel=$suggest";
             showdownSet = showdownSet.Replace("`\n", "").Replace("\n`", "").Replace("`", "").Trim();
             var set = new ShowdownSet(showdownSet);
             var template = AutoLegalityWrapper.GetTemplate(set);
@@ -1371,6 +1372,16 @@ namespace SysBot.Pokemon
 
             // Handle set legality checking and preparing to send
             var pkm = sav.GetLegal(template, out var result);
+            Span<ushort> moves = stackalloc ushort[4];
+            pkm.SetSuggestedMoves(true);
+            pkm.HealPP();
+            pkm.FixMoves();
+            pkm.GetMoves(moves);
+            if (pkm is ITechRecord t)
+            {
+                t.ClearRecordFlags();
+                t.SetRecordFlags(moves);
+            }
             var la = new LegalityAnalysis(pkm);
             pkm = EntityConverter.ConvertToType(pkm, typeof(PK9), out _) ?? pkm;
             PK9? dumpPKM = pkm as PK9;
@@ -1398,14 +1409,13 @@ namespace SysBot.Pokemon
             return (pk, PokeTradeResult.Success);
         }
 
-        private static (bool shiny, ushort abiIndex, char genderChar, PokeTradeResult check) ParseSGA(char input)
+        private static (bool lowLevel, bool shiny, ushort abiIndex, char genderChar, PokeTradeResult check) ParseSGAL(char input)
         {
-            if (input < 'A' || input > 'R')
-                return (false, 0, 'U', PokeTradeResult.TrainerRequestBad);
             ushort request = Base36ToUShort(input.ToString());
-            request -= 10;
+            (ushort levelreq, request) = GetIntAndRemainder(request, 18);
             (ushort shinyreq, request) = GetIntAndRemainder(request, 9);
             (ushort genderreq, ushort abiIndex) = GetIntAndRemainder(request, 3);
+            bool lowLevel = levelreq == 1;
             bool shiny = shinyreq == 0;
             char genderChar = genderreq switch
             {
@@ -1414,7 +1424,7 @@ namespace SysBot.Pokemon
                 2 => 'U',
                 _ => 'M',
             };
-            return (shiny, abiIndex, genderChar, PokeTradeResult.Success);
+            return (lowLevel, shiny, abiIndex, genderChar, PokeTradeResult.Success);
         }
 
         private static (ushort whole, ushort remainder) GetIntAndRemainder(ushort input, ushort divisor)
@@ -1572,6 +1582,8 @@ namespace SysBot.Pokemon
                 Log($"Clone request has 0 EC! Aborting trade.");
                 return (clone, PokeTradeResult.IllegalTrade);
             }
+
+            clone.RefreshChecksum();
 
             poke.TradeData = clone;
             poke.SwapInfoList = swapInfos;
