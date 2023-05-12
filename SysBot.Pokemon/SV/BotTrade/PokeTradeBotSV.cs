@@ -72,9 +72,13 @@ namespace SysBot.Pokemon
         private bool StartFromOverworld = true;
         // Stores whether the last trade was Distribution with fixed code, in which case we don't need to re-enter the code.
         private bool LastTradeDistributionFixed;
+        private bool LastTradeCloneFixed;
 
         // Track the last Pokémon we were offered since it persists between trades.
         private byte[] lastOffered;
+
+        // Track the last distribution code used to check for remote changes.
+        private int LastCodeUsed;
 
         public override async Task MainLoop(CancellationToken token)
         {
@@ -93,6 +97,7 @@ namespace SysBot.Pokemon
                 // Force the bot to go through all the motions again on its first pass.
                 StartFromOverworld = true;
                 LastTradeDistributionFixed = false;
+                LastTradeCloneFixed = false;
 
                 Log($"Starting main {nameof(PokeTradeBotSV)} loop.");
                 await InnerLoop(sav, token).ConfigureAwait(false);
@@ -273,7 +278,9 @@ namespace SysBot.Pokemon
 
             await Click(A, 1_500, token).ConfigureAwait(false);
             // Make sure we clear any Link Codes if we're not in Distribution with fixed code, and it wasn't entered last round.
-            if (!LastTradeDistributionFixed)
+            bool isFixedTrade = LastTradeCloneFixed || LastTradeDistributionFixed;
+            bool requireCodeEntryFixed = isFixedTrade && poke.Code != LastCodeUsed;
+            if (!isFixedTrade || requireCodeEntryFixed)
             {
                 await Click(X, 1_000, token).ConfigureAwait(false);
                 await Click(PLUS, 1_000, token).ConfigureAwait(false);
@@ -289,11 +296,17 @@ namespace SysBot.Pokemon
 
                 await Click(PLUS, 3_000, token).ConfigureAwait(false);
                 StartFromOverworld = false;
+                LastCodeUsed = code;
             }
 
-            if ((poke.Type == PokeTradeType.Random) || (poke.Type == PokeTradeType.Clone && Hub.Config.Clone.CloneWhileIdle))
+            if (poke.Type == PokeTradeType.Random)
             {
                 LastTradeDistributionFixed = !Hub.Config.Distribution.RandomCode;
+            }
+
+            if (poke.Type == PokeTradeType.Clone && Hub.Config.Clone.CloneWhileIdle)
+            {
+                LastTradeCloneFixed = !Hub.Config.Distribution.RandomCode;
             }
 
             // Search for a trade partner for a Link Trade.
@@ -315,6 +328,7 @@ namespace SysBot.Pokemon
             {
                 StartFromOverworld = true;
                 LastTradeDistributionFixed = false;
+                LastTradeCloneFixed = false;
                 await ExitTradeToPortal(false, token).ConfigureAwait(false);
                 return PokeTradeResult.RoutineCancel;
             }
@@ -427,6 +441,7 @@ namespace SysBot.Pokemon
                 {
                     StartFromOverworld = true;
                     LastTradeDistributionFixed = false;
+                    LastTradeCloneFixed = false;
                     await ExitTradeToPortal(false, token).ConfigureAwait(false);
                     return PokeTradeResult.RoutineCancel;
                 }
@@ -608,6 +623,7 @@ namespace SysBot.Pokemon
             // Force the bot to go through all the motions again on its first pass.
             StartFromOverworld = true;
             LastTradeDistributionFixed = false;
+            LastTradeCloneFixed = false;
             return true;
         }
 
@@ -926,8 +942,8 @@ namespace SysBot.Pokemon
             }
             if (offered.HeldItem == (int)config.GennedSwapItem)
             {
-                bool genNickname = offered.Nickname.All(c => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".Contains(c));
-                bool genNickLength = offered.Nickname.Length is 5 or 6 or 11 or 12;
+                bool genNickname = offered.Nickname.All(c => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-".Contains(c));
+                bool genNickLength = offered.Nickname.Length is 6 or 12;
                 if (genNickname && genNickLength)
                     swapInfos.Update(GetCloneSwap(CloneSwapType.GennedRequest, "Clone", offered.Nickname));
             }
@@ -948,6 +964,7 @@ namespace SysBot.Pokemon
             }
             if (evNickname || evHexNickname || evReset)
             {
+                if (offered.HeldItem != (int)config.GennedSwapItem)
                 swapInfos.Update(GetCloneSwap(CloneSwapType.EVSpread, "Clone", offered.Nickname));
             }
 
@@ -981,6 +998,8 @@ namespace SysBot.Pokemon
 
         private (PK9 clone, PokeTradeResult check) HandleTeraSwap(string type, PK9 clone)
         {
+            if (clone.IsEgg)
+                return (clone, PokeTradeResult.TrainerRequestBad);
             MoveType a;
             try
             {
@@ -1032,7 +1051,7 @@ namespace SysBot.Pokemon
                     return (clone, PokeTradeResult.TrainerRequestBad);
 
             //Master balls don't breed down
-            if (clone.WasEgg)
+            if (clone.WasEgg || clone.IsEgg)
             {
                 if (ball is "Master")
                     return (clone, PokeTradeResult.TrainerRequestBad);
@@ -1056,7 +1075,7 @@ namespace SysBot.Pokemon
 
         private static (PK9 clone, PokeTradeResult check) HandleNameRemove(PK9 clone)
         {
-            if (clone.Met_Location == 30001 || clone.FatefulEncounter)
+            if (clone.Met_Location == 30001 || clone.FatefulEncounter || clone.IsEgg)
                 return (clone, PokeTradeResult.TrainerRequestBad);
             clone.SetDefaultNickname();
             return (clone, PokeTradeResult.Success);
@@ -1064,6 +1083,8 @@ namespace SysBot.Pokemon
 
         private static (PK9 clone, PokeTradeResult check) HandleEVSwap(string info, PK9 clone)
         {
+            if (clone.IsEgg)
+                return (clone, PokeTradeResult.TrainerRequestBad);
             int[] spread = new int[] { 0, 0, 0, 0, 0, 0 };
             if (info == "Reset")
             {
@@ -1154,6 +1175,8 @@ namespace SysBot.Pokemon
 
         private (PK9 clone, PokeTradeResult check) HandleItemSwap(string info, PK9 clone)
         {
+            if (clone.IsEgg)
+                return (clone, PokeTradeResult.TrainerRequestBad);
             bool isParsable = short.TryParse(info, out short itemID);
             if (!isParsable)
             {
@@ -1183,76 +1206,50 @@ namespace SysBot.Pokemon
             return (clone, PokeTradeResult.TrainerRequestBad);
         }
 
-        private static ushort Base36ToUShort(string convert)
+        private static long Base64ToInt64(string convert)
         {
-            int tbase = 36;
-            ushort b10 = (ushort)convert
-                        .Select(d => d >= '0' && d <= '9' ? d - '0' : 10 + char.ToUpper(d) - 'A')
-                        .Aggregate(0, (pos, d) => pos * tbase + d);
+            string digitsStr = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-";
+            char[] radix64 = digitsStr.ToCharArray();
+            int tbase = 64;
+            long b10 = 0;
+            for (int i = convert.Length; i > 0; i--)
+            {
+                b10 += Array.IndexOf(radix64, convert[^i]) * (long)Math.Pow(tbase, i - 1);
+            }
             return b10;
         }
-        
+
         private (PK9 pk, PokeTradeResult check) HandleGennedSwap(PK9 offered, PartnerDataHolderSV partner)
         {
-            string nature, abiName, formName = "";
-            int ability;
-            ushort abiIndex, natureIndex;
-            byte form;
-            bool lowLevel = false, shiny, hasForm = false;
-            char genderChar, scaleChar;
+            string nature, abiName, ball, formName = "";
+            bool hasForm = false;
             PokeTradeResult update;
             var s = GameInfo.Strings;
-            string genInput = offered.Nickname;
-            ushort species = Base36ToUShort(genInput[..2]);
-            string specName = GameInfo.GetStrings(1).Species[species];           
+            string genInput = offered.Nickname[..6];
+            long setReqInput = Base64ToInt64(genInput);
+            (ushort species, byte form, ushort natureIndex, ushort teraIndex, ushort ballIndex, char scaleChar, bool lowLevel, bool shiny, char genderChar, int abiIndex, update) = ParseSetReq(setReqInput);
             if (species >= (int)Species.MAX_COUNT)
                 return (offered, PokeTradeResult.TrainerRequestBad);
+            string specName = GameInfo.GetStrings(1).Species[species];
             PersonalInfo9SV formInfo;
             PersonalInfo9SV speciesInfo = formInfo = PersonalTable.SV[species];
-
-            // Handle Species with multiple Forms and Parse set info
             string[] AvailForms = species == (int)Species.Alcremie ? FormConverter.GetAlcremieFormList(s.forms) : FormConverter.GetFormList(species, s.types, s.forms, GameInfo.GenderSymbolASCII, EntityContext.Gen9);
-            bool formNick = offered.Nickname.Length is 6 or 12;
-            if (formNick)
+            hasForm = speciesInfo.IsFormWithinRange(form);
+            if (hasForm)
             {
-                form = (byte)Base36ToUShort(genInput.Substring(2, 1));
-                hasForm = speciesInfo.IsFormWithinRange(form);
-                if (hasForm)
-                {
-                    formName = AvailForms[form];
-                    formInfo = PersonalTable.SV.GetFormEntry(species, form);
-                }
-                (lowLevel, shiny, abiIndex, genderChar, update) = ParseSGAL(genInput[3]);
-                if (update != PokeTradeResult.Success)
-                    return (offered, PokeTradeResult.TrainerRequestBad);
-                if (hasForm)
-                {
-                    ability = PersonalTable.SV[species, form].GetAbilityAtIndex(abiIndex);
-                }
-                else
-                {
-                    ability = PersonalTable.SV[species].GetAbilityAtIndex(abiIndex);
-                }
-                abiName = GameInfo.GetStrings(1).Ability[ability];
-                scaleChar = genInput[4];
-                natureIndex = Base36ToUShort(genInput.Substring(5, 1));
-                if (natureIndex > 24)
-                    natureIndex = (ushort)rnd.Next(0, 24);
-                nature = GameInfo.GetStrings(1).Natures[natureIndex];
-            } else
-            {
-                (lowLevel, shiny, abiIndex, genderChar, update) = ParseSGAL(genInput[2]);
-                if (update != PokeTradeResult.Success)
-                    return (offered, PokeTradeResult.TrainerRequestBad);
-                abiName = GameInfo.GetStrings(1).Ability[PersonalTable.SV[species].GetAbilityAtIndex(abiIndex)];
-                scaleChar = genInput[3];
-                natureIndex = Base36ToUShort(genInput.Substring(4, 1));
-                if (natureIndex > 24)
-                    natureIndex = (ushort)rnd.Next(0, 24);
-                nature = GameInfo.GetStrings(1).Natures[natureIndex];
+                formName = AvailForms[form];
+                formInfo = PersonalTable.SV.GetFormEntry(species, form);
             }
+            abiName = GameInfo.GetStrings(1).Ability[formInfo.GetAbilityAtIndex(abiIndex)];
+            if (natureIndex > 24)
+                natureIndex = (ushort)rnd.Next(0, 24);
+            nature = GameInfo.GetStrings(1).Natures[natureIndex];
+            if (Enum.IsDefined(typeof(Ball), (byte)(ballIndex)))
+                ball = ((Ball)ballIndex).ToString();
+            else
+                return (offered, PokeTradeResult.TrainerRequestBad);
 
-            int validGender = hasForm ? formInfo.Gender : speciesInfo.Gender;
+            int validGender = formInfo.Gender;
 
             var reqGender = validGender switch
             {
@@ -1292,21 +1289,26 @@ namespace SysBot.Pokemon
                 formLog = formLog.Replace(" (", "-");
                 formLog = formLog.Replace(")", "");
             }
-            Log($"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature.");
+
+            MoveType tera = (MoveType)(byte)teraIndex;
+
+            var genLog = lowLevel ? $"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature at lowest legal level." : $"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature.";
+            Log(genLog);
+            Log($"Appearing caught in {ball} Ball with Tera Type {tera}.");
 
             // Handle specific IV requests
             string ReqIVs = "";
             string[] ivTitles = { "HP", "Atk", "Def", "Spe", "SpA", "SpD" };
-            if (genInput.Length is 11 or 12)
+            if (offered.Nickname.Length == 12)
             {
-                string IVSpread = genInput[^6..];
+                string IVSpread = offered.Nickname[^6..].ToUpper();
                 int i = 0; int j;
                 foreach (char c in IVSpread)
                 {
                     if (c is 'W' or 'X' or 'Y' or 'Z')
                         j = 0;
                     else
-                        j = Base36ToUShort(c.ToString());
+                        j = Convert.ToInt16(Base64ToInt64(c.ToString()));
                     if (j < 31)
                         ReqIVs += j + " " + ivTitles[i] + " / ";
                     i++;
@@ -1337,6 +1339,8 @@ namespace SysBot.Pokemon
             showdownSet += "Ability: " + abiName + "\r\n";
             if (shiny)
                 showdownSet += "Shiny: Yes\r\n";
+            showdownSet += "Ball: " + ball + "\r\n";
+            showdownSet += "Tera Type: " + tera.ToString() + "\r\n";
             showdownSet += nature + " Nature\r\n";
             if (ReqIVs != "")
                 showdownSet += "IVs: " + ReqIVs + "\r\n";
@@ -1357,6 +1361,7 @@ namespace SysBot.Pokemon
             if (!raidOnly)            
                 showdownSet += "~!Location=30024\r\n";
             showdownSet += "~=Generation=9\r\n";
+            showdownSet += ".HyperTrainFlags=0\r\n";
             if (lowLevel)
                 showdownSet += ".CurrentLevel=$suggest";
             showdownSet = showdownSet.Replace("`\n", "").Replace("\n`", "").Replace("`", "").Trim();
@@ -1394,7 +1399,6 @@ namespace SysBot.Pokemon
                 Log($"Refer to set number {Hub.Config.Clone.SetLogCount}.");
                 return (offered, PokeTradeResult.TrainerRequestBad);
             }
-            pk.HyperTrainClear();
             pk.ResetPartyStats();
             if (pk.WasEgg)
             {
@@ -1409,14 +1413,22 @@ namespace SysBot.Pokemon
             return (pk, PokeTradeResult.Success);
         }
 
-        private static (bool lowLevel, bool shiny, ushort abiIndex, char genderChar, PokeTradeResult check) ParseSGAL(char input)
+        private static (ushort species, byte form, ushort nature, ushort tera, ushort ball, char scaleChar, bool lowLevel, bool shiny, char genderChar, int abiIndex, PokeTradeResult check) ParseSetReq(long input)
         {
-            ushort request = Base36ToUShort(input.ToString());
+            long request = input;
+            (ushort species, request) = GetIntAndRemainder(request, 25272000);
+            (ushort formReq, request) = GetIntAndRemainder(request, 1263600);
+            (ushort nature, request) = GetIntAndRemainder(request, 50544);
+            (ushort tera, request) = GetIntAndRemainder(request, 2808);
+            (ushort ball, request) = GetIntAndRemainder(request, 108);
+            (ushort scale, request) = GetIntAndRemainder(request, 36);
             (ushort levelreq, request) = GetIntAndRemainder(request, 18);
             (ushort shinyreq, request) = GetIntAndRemainder(request, 9);
-            (ushort genderreq, ushort abiIndex) = GetIntAndRemainder(request, 3);
+            (ushort genderreq, int abiIndex) = GetIntAndRemainder(request, 3);
+            byte form = (byte)formReq;
+            ball += 1;
             bool lowLevel = levelreq == 1;
-            bool shiny = shinyreq == 0;
+            bool shiny = shinyreq == 1;
             char genderChar = genderreq switch
             {
                 0 => 'M',
@@ -1424,13 +1436,20 @@ namespace SysBot.Pokemon
                 2 => 'U',
                 _ => 'M',
             };
-            return (lowLevel, shiny, abiIndex, genderChar, PokeTradeResult.Success);
+            char scaleChar = scale switch
+            {
+                0 => 'R',
+                1 => 'T',
+                2 => 'J',
+                _ => 'R',
+            };
+            return (species, form, nature, tera, ball, scaleChar, lowLevel, shiny, genderChar, abiIndex, PokeTradeResult.Success);
         }
 
-        private static (ushort whole, ushort remainder) GetIntAndRemainder(ushort input, ushort divisor)
+        private static (ushort whole, int remainder) GetIntAndRemainder(long input, int divisor)
         {
             ushort whole = (ushort)(input / divisor);
-            ushort remainder = (ushort)(input % divisor);
+            int remainder = (int)(input % divisor);
             return (whole, remainder);
         }
 
@@ -1469,6 +1488,7 @@ namespace SysBot.Pokemon
                 if (EVSpread != null)
                 {
                     string spread = EVSpread.SwapInfo[..6] + trash.Nickname[^6..];
+                    swapInfos.Update(GetCloneSwap(CloneSwapType.EVSpread, "Combo", spread));
                 }
                 else
                 {
