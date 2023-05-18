@@ -965,12 +965,18 @@ namespace SysBot.Pokemon
             if (evNickname || evHexNickname || evReset)
             {
                 if (offered.HeldItem != (int)config.GennedSwapItem)
-                swapInfos.Update(GetCloneSwap(CloneSwapType.EVSpread, "Clone", offered.Nickname));
+                {
+                    swapInfos.Update(GetCloneSwap(CloneSwapType.EVSpread, "Clone", offered.Nickname));
+                    swapInfos.Update(GetCloneSwap(CloneSwapType.NicknameClear, "Auto"));
+                }
             }
 
             CloneSwapInfo? isBallTeraName = CheckBallTeraName(offered, "Clone");
             if (isBallTeraName != null)
+            {
                 swapInfos.Update(isBallTeraName);
+                swapInfos.Update(GetCloneSwap(CloneSwapType.NicknameClear, "Auto"));
+            }
 
             return swapInfos;
         }
