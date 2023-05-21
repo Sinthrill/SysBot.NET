@@ -1364,9 +1364,9 @@ namespace SysBot.Pokemon
             showdownSet += boxVersionCheck;
             if (!staticScale)
                 showdownSet += scaleSet;
-            if (!raidOnly)            
-                showdownSet += "~!Location=30024\r\n";
             showdownSet += "~=Generation=9\r\n";
+            if (!raidOnly)
+                showdownSet += "~!Location=30024\r\n";
             showdownSet += ".HyperTrainFlags=0\r\n";
             if (lowLevel)
                 showdownSet += ".CurrentLevel=$suggest";
@@ -1402,9 +1402,9 @@ namespace SysBot.Pokemon
             {
                 var reason = result == "Timeout" ? $"That {specName} set took too long to generate." : result == "VersionMismatch" ? "Request refused: PKHeX and Auto-Legality Mod version mismatch." : $"I wasn't able to create a {specName} from that set.";
                 Log(reason);
-                Log($"Refer to set number {Hub.Config.Clone.SetLogCount}.");
                 return (offered, PokeTradeResult.TrainerRequestBad);
             }
+            Log($"Refer to set number {Hub.Config.Clone.SetLogCount}.");
             pk.ResetPartyStats();
             if (pk.WasEgg)
             {
