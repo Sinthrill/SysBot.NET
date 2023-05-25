@@ -20,7 +20,7 @@ namespace SysBot.Pokemon
     {
         private readonly PokeTradeHub<PK9> Hub;
         private readonly TradeSettings TradeSettings;
-        private readonly TradeAbuseSettings AbuseSettings;
+        public readonly TradeAbuseSettings AbuseSettings;
 
         public ICountSettings Counts => TradeSettings;
 
@@ -398,7 +398,7 @@ namespace SysBot.Pokemon
             RecordUtil<PokeTradeBot>.Record($"Initiating\t{trainerNID:X16}\t{tradePartner.TrainerName}\t{poke.Trainer.TrainerName}\t{poke.Trainer.ID}\t{poke.ID}\t{toSend.EncryptionConstant:X8}");
             Log($"Found Link Trade partner: {tradePartner.TrainerName}-{tradePartner.TID7} (ID: {trainerNID})");
 
-            var partnerCheck = CheckPartnerReputation(poke, trainerNID, tradePartner.TrainerName);
+            var partnerCheck = await CheckPartnerReputation(this, poke, trainerNID, tradePartner.TrainerName, AbuseSettings, PreviousUsers, PreviousUsersDistribution, EncounteredUsers, token);
             if (partnerCheck != PokeTradeResult.Success)
             {
                 await Click(A, 1_000, token).ConfigureAwait(false); // Ensures we dismiss a popup.
@@ -1732,167 +1732,6 @@ namespace SysBot.Pokemon
                 Log($"Left the Barrier. Count: {Hub.BotSync.Barrier.ParticipantCount}");
             }
         }
-
-        private PokeTradeResult CheckPartnerReputation(PokeTradeDetail<PK9> poke, ulong TrainerNID, string TrainerName)
-        {
-            bool quit = false;
-            var user = poke.Trainer;
-            bool isDistribution = false;
-            string msg = "";
-            if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
-                isDistribution = true;
-            var useridmsg = isDistribution ? "" : $" ({user.ID})";
-            var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
-            int attempts;
-            var listCool = UserCooldowns;
-
-            CheckExpiration(TrainerNID);
-
-            var whitelisted = AbuseSettings.WhitelistIDs.List.Find(z => z.ID == TrainerNID);
-            if (whitelisted != null)
-            {
-                Log($"Encountered whitelisted user {whitelisted.Name} with ID {TrainerNID})");
-                return PokeTradeResult.Success;
-            }
-
-            var cooldown = list.TryGetPrevious(TrainerNID);
-            if (cooldown != null)
-            {
-                var delta = DateTime.Now - cooldown.Time;
-                var coolDelta = DateTime.Now - DateTime.ParseExact(AbuseSettings.CooldownUpdate, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-                Log($"Last saw {TrainerName} {delta.TotalMinutes:F1} minutes ago (OT: {TrainerName}).");
-
-                var cd = AbuseSettings.TradeCooldown;
-                if (cd != 0 && TimeSpan.FromMinutes(cd) > delta)
-                {
-                    poke.Notifier.SendNotification(this, poke, "You have ignored the trade cooldown set by the bot owner. The owner has been notified.");
-                    msg = $"Found {TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
-                    list.TryRegister(TrainerNID, TrainerName);
-                    if (AbuseSettings.EchoNintendoOnlineIDCooldown)
-                        msg += $"\nID: {TrainerNID}";
-                    if (!string.IsNullOrWhiteSpace(AbuseSettings.CooldownAbuseEchoMention))
-                        msg = $"{AbuseSettings.CooldownAbuseEchoMention} {msg}";
-                    EchoUtil.Echo(msg);
-                    if (AbuseSettings.AutoBanCooldown && TimeSpan.FromMinutes(60) < coolDelta)
-                    {
-                        attempts = listCool.TryInsert(TrainerNID, TrainerName);
-                        Log($"Connection during cooldown number {attempts} for {TrainerName}.");
-                        if (attempts >= AbuseSettings.RepeatConnections)
-                        {
-                            DateTime expires = DateTime.Now.AddDays(2);
-                            string expiration = $"{expires:yyyy.MM.dd} - 23:59:59";
-                            AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "Cooldown Abuse Ban", expiration) });
-                            string banMsg = $"Added {TrainerName}-{TrainerNID} to the BannedIDs list for cooldown abuse.";
-                            Log(banMsg);
-                            EchoUtil.Echo(banMsg);
-                        }
-                    }
-                    quit = true;
-                }
-            }
-
-            if (!isDistribution)
-            {
-                var previousEncounter = EncounteredUsers.TryRegister(poke.Trainer.ID, TrainerName, poke.Trainer.ID);
-                if (previousEncounter != null && previousEncounter.Name != TrainerName)
-                {
-                    if (AbuseSettings.TradeAbuseAction != TradeAbuseAction.Ignore)
-                    {
-                        if (AbuseSettings.TradeAbuseAction == TradeAbuseAction.BlockAndQuit)
-                        {
-                            AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "in-game block for sending to multiple in-game players") });
-                            Log($"Added {TrainerNID} to the BannedIDs list.");
-                        }
-                        quit = true;
-                    }
-
-                    msg = $"Found {user.TrainerName}{useridmsg} sending to multiple in-game players. Previous OT: {previousEncounter.Name}, Current OT: {TrainerName}";
-                    if (AbuseSettings.EchoNintendoOnlineIDMultiRecipients)
-                        msg += $"\nID: {TrainerNID}";
-                    if (!string.IsNullOrWhiteSpace(AbuseSettings.MultiRecipientEchoMention))
-                        msg = $"{AbuseSettings.MultiRecipientEchoMention} {msg}";
-                    EchoUtil.Echo(msg);
-                }
-            }
-
-            if (quit)
-                return PokeTradeResult.SuspiciousActivity;
-
-            // Try registering the partner in our list of recently seen.
-            // Get back the details of their previous interaction.
-            var previous = list.TryGetPrevious(TrainerNID);
-            if (previous != null && previous.NetworkID != TrainerNID && !isDistribution)
-            {
-                var delta = DateTime.Now - previous.Time;
-                if (delta < TimeSpan.FromMinutes(AbuseSettings.TradeAbuseExpiration) && AbuseSettings.TradeAbuseAction != TradeAbuseAction.Ignore)
-                {
-                    if (AbuseSettings.TradeAbuseAction == TradeAbuseAction.BlockAndQuit)
-                    {
-                        AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "in-game block for multiple accounts") });
-                        Log($"Added {TrainerNID} to the BannedIDs list.");
-                    }
-                    quit = true;
-                }
-
-                msg = $"Found {user.TrainerName}{useridmsg} using multiple accounts.\nPreviously encountered {previous.Name} ({previous.RemoteID}) {delta.TotalMinutes:F1} minutes ago on OT: {TrainerName}.";
-                if (AbuseSettings.EchoNintendoOnlineIDMulti)
-                    msg += $"\nID: {TrainerNID}";
-                if (!string.IsNullOrWhiteSpace(AbuseSettings.MultiAbuseEchoMention))
-                    msg = $"{AbuseSettings.MultiAbuseEchoMention} {msg}";
-                EchoUtil.Echo(msg);
-            }
-
-            if (quit)
-                return PokeTradeResult.SuspiciousActivity;
-
-            var entry = AbuseSettings.BannedIDs.List.Find(z => z.ID == TrainerNID);
-            if (entry != null)
-            {
-                msg = $"{user.TrainerName}{useridmsg} is a banned user, and was encountered in-game using OT: {TrainerName}.";
-                if (!string.IsNullOrWhiteSpace(entry.Comment))
-                    msg += $"\nUser was banned for: {entry.Comment}";
-                if (!string.IsNullOrWhiteSpace(AbuseSettings.BannedIDMatchEchoMention))
-                    msg = $"{AbuseSettings.BannedIDMatchEchoMention} {msg}";
-                EchoUtil.Echo(msg);
-                return PokeTradeResult.SuspiciousActivity;
-            }
-
-            return PokeTradeResult.Success;
-        }
-
-        private void CheckExpiration(ulong trainerNID)
-        {
-            var isWhitelisted = AbuseSettings.WhitelistIDs.List.Find(z => z.ID == trainerNID);
-            var isBlacklisted = AbuseSettings.BannedIDs.List.Find(z => z.ID == trainerNID);
-
-            if (isWhitelisted != null)
-            {
-                bool hasExpired = DateTime.Now > DateTime.ParseExact(isWhitelisted.Expiration, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-                if (hasExpired)
-                {
-                    AbuseSettings.WhitelistIDs.List.Remove(isWhitelisted);
-                    Log($"{isWhitelisted.Name}({isWhitelisted.ID}) whitelist has expired.");
-                }
-            }
-
-            if (isBlacklisted != null)
-            {
-                bool hasExpired = DateTime.Now > DateTime.ParseExact(isBlacklisted.Expiration, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-                if (hasExpired)
-                {
-                    AbuseSettings.BannedIDs.List.Remove(isBlacklisted);
-                    Log($"{isBlacklisted.Name}({isBlacklisted.ID}) blacklist has expired.");
-                }
-            }
-        }
-
-        private static RemoteControlAccess GetReference(string name, ulong id, string comment, string expiration = "9999.12.31 - 23:59:59") => new()
-        {
-            ID = id,
-            Name = name,
-            Expiration = expiration,
-            Comment = $"Added automatically on {DateTime.Now:yyyy.MM.dd - HH:mm:ss} ({comment})",
-        };
 
         private static CloneSwapInfo GetCloneSwap(CloneSwapType type, string requestMon, string info) => new()
         {
