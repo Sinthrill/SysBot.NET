@@ -22,7 +22,7 @@ namespace SysBot.Pokemon
         public TPoke TradeData;
 
         /// <summary> Trainer details </summary>
-        public readonly PokeTradeTrainerInfo Trainer;
+        public PokeTradeTrainerInfo Trainer;
 
         /// <summary> Destination to be notified for status updates </summary>
         public readonly IPokeTradeNotifier<TPoke> Notifier;

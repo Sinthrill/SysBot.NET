@@ -47,7 +47,7 @@ namespace SysBot.Pokemon
             set => _showdownSetLog = value;
         }
 
-        public void AddGennedSetLog() => Interlocked.Increment(ref _showdownSetLog);
+        public int AddGennedSetLog() => Interlocked.Increment(ref _showdownSetLog);
 
         // Synchronize
 

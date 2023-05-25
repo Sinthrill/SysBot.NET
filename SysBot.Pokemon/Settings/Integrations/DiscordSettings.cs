@@ -80,6 +80,9 @@ namespace SysBot.Pokemon
         [Category(Channels), Description("Echo channels that will log special messages.")]
         public RemoteControlAccessList EchoChannels { get; set; } = new();
 
+        [Category(Channels), Description("Echo channels that will log clone embeds.")]
+        public RemoteControlAccessList EchoEmbedChannels { get; set; } = new();
+
         [Category(Operation), Description("Returns PKMs of Pokémon shown in the trade to the user.")]
         public bool ReturnPKMs { get; set; } = true;
 

@@ -206,7 +206,11 @@ namespace SysBot.Pokemon
             {
                 result = await PerformLinkCodeTrade(sav, detail, token).ConfigureAwait(false);
                 if (result == PokeTradeResult.Success)
+                {
+                    if (detail.Type == PokeTradeType.Clone)
+                        EchoCloneTradeResult(detail, result);
                     return;
+                }
             }
             catch (SocketException socket)
             {
@@ -227,6 +231,8 @@ namespace SysBot.Pokemon
         private void HandleAbortedTrade(PokeTradeDetail<PK9> detail, PokeRoutineType type, uint priority, PokeTradeResult result)
         {
             detail.IsProcessing = false;
+            if (detail.Type == PokeTradeType.Clone)
+                EchoCloneTradeResult(detail, result);
             if (result.ShouldAttemptRetry() && detail.Type != PokeTradeType.Random && !detail.IsRetry)
             {
                 detail.IsRetry = true;
@@ -238,6 +244,30 @@ namespace SysBot.Pokemon
                 detail.SendNotification(this, $"Oops! Something happened. Canceling the trade: {result}.");
                 detail.TradeCanceled(this, result);
             }
+        }
+
+        private static void EchoCloneTradeResult(PokeTradeDetail<PK9> detail, PokeTradeResult result)
+        {
+            string content = result == PokeTradeResult.Success ? "Trade Completed" : "Trade Failed";
+            string trainerData = $"{detail.Trainer.TrainerName}-{detail.Trainer.ID}";
+            string cloneData = "Clone request data is:\n";
+            string embedColor = result == PokeTradeResult.Success ? "39168" : "16711680";
+
+            if (detail.SwapInfoList != null)
+            {
+                var requests = detail.SwapInfoList.Summarize();
+                var requestBlock = string.Join("\n", requests);
+                cloneData += requestBlock;
+            }
+            else
+            {
+                cloneData += "Regular clone requested.";
+            }
+
+            string requestedMon = detail.TradeData.FileNameWithoutExtension;
+            string embedData = $"Trainer: {trainerData}\n\n{cloneData}\n\nRequested mon: {requestedMon}";
+            string payload = $"{{'embeds': [{{'type': 'rich', 'title': '{content}', 'color': '{embedColor}', 'description': '{embedData}'}}]}}";
+            EchoUtil.EchoEmbed(payload);
         }
 
         private async Task<PokeTradeResult> PerformLinkCodeTrade(SAV9SV sav, PokeTradeDetail<PK9> poke, CancellationToken token)
@@ -1373,8 +1403,8 @@ namespace SysBot.Pokemon
             showdownSet = showdownSet.Replace("`\n", "").Replace("\n`", "").Replace("`", "").Trim();
             var set = new ShowdownSet(showdownSet);
             var template = AutoLegalityWrapper.GetTemplate(set);
-            Hub.Config.Clone.AddGennedSetLog();
-            File.WriteAllText($@".\sets\ShowdownSet{Hub.Config.Clone.SetLogCount}.txt", showdownSet);
+            int setNumber = Hub.Config.Clone.AddGennedSetLog();
+            File.WriteAllText($@".\sets\ShowdownSet{setNumber}.txt", showdownSet);
             if (set.InvalidLines.Count != 0)
             {
                 Log($"Unable to parse Showdown Set:\n{string.Join("\n", set.InvalidLines)}");
@@ -1404,7 +1434,7 @@ namespace SysBot.Pokemon
                 Log(reason);
                 return (offered, PokeTradeResult.TrainerRequestBad);
             }
-            Log($"Refer to set number {Hub.Config.Clone.SetLogCount}.");
+            Log($"Refer to set number {setNumber}.");
             pk.ResetPartyStats();
             if (pk.WasEgg)
             {
@@ -1513,6 +1543,9 @@ namespace SysBot.Pokemon
         {
             if (Hub.Config.Discord.ReturnPKMs)
                 poke.SendNotification(this, offered, "Here's what you showed me!");
+
+            poke.TradeData = offered;
+            poke.Trainer = new PokeTradeTrainerInfo(partner.TrainerName, ulong.Parse(partner.TID7));
 
             var la = new LegalityAnalysis(offered);
             if (!la.Valid)
@@ -1749,7 +1782,9 @@ namespace SysBot.Pokemon
                             DateTime expires = DateTime.Now.AddDays(2);
                             string expiration = $"{expires:yyyy.MM.dd} - 23:59:59";
                             AbuseSettings.BannedIDs.AddIfNew(new[] { GetReference(TrainerName, TrainerNID, "Cooldown Abuse Ban", expiration) });
-                            Log($"Added {TrainerName}-{TrainerNID} to the BannedIDs list for cooldown abuse.");
+                            string banMsg = $"Added {TrainerName}-{TrainerNID} to the BannedIDs list for cooldown abuse.";
+                            Log(banMsg);
+                            EchoUtil.Echo(banMsg);
                         }
                     }
                     quit = true;
