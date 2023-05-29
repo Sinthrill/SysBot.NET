@@ -550,6 +550,9 @@ namespace SysBot.Pokemon
                         case CloneSwapType.DistroRequest:
                             counts.AddCompletedDistroSwaps();
                             break;
+                        case CloneSwapType.OTSwap:
+                            counts.AddCompletedOTSwaps();
+                            break;
                     }
                 }
             }
@@ -946,6 +949,7 @@ namespace SysBot.Pokemon
             var itemTriggers = new List<int>
             {
                 (int)config.ItemSwapItem,
+                (int)config.OTSwapItem,
                 (int)config.NickSwapItem,
                 (int)config.DistroSwapItem,
                 (int)config.GennedSwapItem,
@@ -957,6 +961,10 @@ namespace SysBot.Pokemon
             if (offered.HeldItem == (int)config.ItemSwapItem)
             {
                 swapInfos.Update(GetCloneSwap(CloneSwapType.ItemRequest, "Clone", offered.Nickname));
+            }
+            if (offered.HeldItem == (int)config.OTSwapItem)
+            {
+                swapInfos.Update(GetCloneSwap(CloneSwapType.OTSwap, "Clone"));
             }
             if (offered.HeldItem == (int)config.NickSwapItem)
             {
@@ -1044,6 +1052,58 @@ namespace SysBot.Pokemon
                 Log(e.Message);
                 return (clone, PokeTradeResult.TrainerRequestBad);
             }
+        }
+
+        private static (PK9 clone, PokeTradeResult check) HandleOTSwap(PK9 clone, PartnerDataHolderSV partner)
+        {
+            if (clone.Version != 50 && clone.Version != 51)
+                return (clone, PokeTradeResult.TrainerRequestBad);
+
+            bool isShiny = clone.IsShiny;
+
+            if ((clone.Species == (int)Species.Koraidon && partner.Game == 51) || (clone.Species == (int)Species.Miraidon && partner.Game == 50))
+            {
+                clone.OT_Name = partner.TrainerName;
+                clone.Language = partner.Language;
+                clone.TID16 = (ushort)rnd.Next(1, 65536);
+                clone.SID16 = (ushort)rnd.Next(1, 65536);
+                clone.OT_Gender = partner.Gender;
+            } else
+            {
+                clone.OT_Name = partner.TrainerName;
+                clone.Language = partner.Language;
+                clone.DisplayTID = uint.Parse(partner.TID7);
+                clone.DisplaySID = uint.Parse(partner.SID7);
+                clone.Version = partner.Game;
+                clone.OT_Gender = partner.Gender;
+            }
+
+            if (isShiny)
+            {
+                bool isSquareShiny = clone.ShinyXor == 0;
+                if (clone.Met_Location == 30024)
+                    clone.PID = isSquareShiny ? (((uint)(clone.TID16 ^ clone.SID16) ^ (clone.PID & 0xFFFF) ^ 0) << 16) | (clone.PID & 0xFFFF) : (((uint)(clone.TID16 ^ clone.SID16) ^ (clone.PID & 0xFFFF) ^ 1u) << 16) | (clone.PID & 0xFFFF);                    
+                else
+                {
+                    if (isSquareShiny)
+                    {
+                        do { clone.SetUnshiny(); clone.SetShiny(); } while (clone.ShinyXor != 0);
+                    }
+                    else
+                    {
+                        do { clone.SetUnshiny(); clone.SetShiny(); } while (clone.ShinyXor == 0);
+                    }
+                }
+            }
+
+            if (clone.WasEgg && clone.Egg_Location == 30002)
+                clone.Egg_Location = 30023;
+
+            var la = new LegalityAnalysis(clone);
+            if (!la.Valid)
+                return (clone, PokeTradeResult.TrainerRequestBad);
+
+            return (clone, PokeTradeResult.Success);
         }
 
         private (PK9 clone, PokeTradeResult check) HandleBallSwap(string ball, PK9 clone)
@@ -1362,6 +1422,15 @@ namespace SysBot.Pokemon
 
             string genderOTSet = partner.Gender == 0 ? "Male" : "Female";
 
+            bool randID = (species == (ushort)Species.Koraidon && partner.Game != 50) || (species == (ushort)Species.Miraidon && partner.Game != 51);
+            uint newID32 = new();
+            if (randID)
+            {
+                uint newSID = (uint)rnd.Next(1, 65536);
+                uint newTID = (uint)rnd.Next(1, 65536);
+                newID32 = (newSID << 16) | newTID;
+            }
+
             // Generate basic Showdown Set information
             string showdownSet = "";
             showdownSet += specName;
@@ -1378,8 +1447,8 @@ namespace SysBot.Pokemon
                 showdownSet += "IVs: " + ReqIVs + "\r\n";
             showdownSet += "Language: " + Enum.GetName(typeof(LanguageID), partner.Language) + "\r\n";
             showdownSet += "OT: " + partner.TrainerName + "\r\n";
-            showdownSet += "TID: " + partner.TID7 + "\r\n";
-            showdownSet += "SID: " + partner.SID7 + "\r\n";
+            showdownSet += randID ? "TID: " + (newID32 % 1000000) + "\r\n" : "TID: " + partner.TID7 + "\r\n";
+            showdownSet += randID ? "SID: " + (newID32 / 1000000) + "\r\n" : "SID: " + partner.SID7 + "\r\n";
             showdownSet += "OTGender: " + genderOTSet + "\r\n";
             string boxVersionCheck = species switch
             {
@@ -1487,15 +1556,25 @@ namespace SysBot.Pokemon
 
         private CloneSwapInfoList CheckTrashmon(PK9 trash, CloneSwapInfoList swapInfos)
         {
+            var config = Hub.Config.Clone;
             bool evNickname = trash.Nickname.All(c => "M0SA".Contains(c)) && trash.Nickname.Length == 6;
             bool evHexNickname = trash.Nickname.All(c => "0123456789ABCDEFSN".Contains(c)) && trash.Nickname.Length == 12;
             bool evReset = trash.Nickname == "Reset";
             string item = GameInfo.GetStrings(1).Item[trash.HeldItem];
-            if (trash.HeldItem == (int)Hub.Config.Clone.ItemSwapItem)
+            var itemTriggers = new List<int>
+            {
+                (int)config.ItemSwapItem,
+                (int)config.OTSwapItem,
+            };
+            if (trash.HeldItem == (int)config.ItemSwapItem)
             {
                 swapInfos.Update(GetCloneSwap(CloneSwapType.ItemRequest, "Trash", trash.Nickname));
             }
-            if (trash.HeldItem != 0 && trash.HeldItem != (int)Hub.Config.Clone.ItemSwapItem)
+            if (trash.HeldItem == (int)config.OTSwapItem)
+            {
+                swapInfos.Update(GetCloneSwap(CloneSwapType.OTSwap, "Trash"));
+            }
+            if (trash.HeldItem != 0 && !itemTriggers.Contains(trash.HeldItem))
             {
                 string[] itemString = item.Split(' ');
                 if (itemString.Length > 1)
@@ -1617,6 +1696,9 @@ namespace SysBot.Pokemon
                     case CloneSwapType.ItemRequest:
                         (clone, update) = HandleItemSwap(swap.SwapInfo, clone);
                         break;
+                    case CloneSwapType.OTSwap:
+                        (clone, update) = HandleOTSwap(clone, partner);
+                        break;
                     default:
                         break;
                 }
@@ -1635,6 +1717,15 @@ namespace SysBot.Pokemon
                 if (DumpSetting.Dump)
                     DumpPokemon(DumpSetting.DumpFolder, "hacked", clone);
                 Log($"Clone request has 0 EC! Aborting trade.");
+                return (clone, PokeTradeResult.IllegalTrade);
+            }
+
+            var la2 = new LegalityAnalysis(clone);
+            if (!la2.Valid)
+            {
+                if (DumpSetting.Dump)
+                    DumpPokemon(DumpSetting.DumpFolder, "hackedClone", clone);
+                Log($"Resulting Pokemon is illegal! Aborting trade.");
                 return (clone, PokeTradeResult.IllegalTrade);
             }
 

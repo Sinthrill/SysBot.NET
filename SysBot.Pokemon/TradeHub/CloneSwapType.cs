@@ -17,6 +17,7 @@ namespace SysBot.Pokemon.TradeHub
         GennedRequest,
         DistroRequest,
         ItemRequest,
+        OTSwap,
     }
 
     [TypeConverter(typeof(ExpandableObjectConverter))]

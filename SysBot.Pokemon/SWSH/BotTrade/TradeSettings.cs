@@ -57,6 +57,7 @@ namespace SysBot.Pokemon
         private int _completedNameRemoves;
         private int _completedDistroSwaps;
         private int _completedGennedSwaps;
+        private int _completedOTSwaps;
 
         [Category(Counts), Description("Completed Surprise Trades")]
         public int CompletedSurprise
@@ -156,6 +157,13 @@ namespace SysBot.Pokemon
             set => _completedGennedSwaps = value;
         }
 
+        [Category(Counts), Description("Completed OT Swap Trades")]
+        public int CompletedOTSwaps
+        {
+            get => _completedOTSwaps;
+            set => _completedOTSwaps = value;
+        }
+
         [Category(Counts), Description("When enabled, the counts will be emitted when a status check is requested.")]
         public bool EmitCountsOnStatusCheck { get; set; }
 
@@ -173,6 +181,7 @@ namespace SysBot.Pokemon
         public void AddCompletedNameRemoves() => Interlocked.Increment(ref _completedNameRemoves);
         public void AddCompletedDistroSwaps() => Interlocked.Increment(ref _completedDistroSwaps);
         public void AddCompletedGennedSwaps() => Interlocked.Increment(ref _completedGennedSwaps);
+        public void AddCompletedOTSwaps() => Interlocked.Increment(ref _completedOTSwaps);
 
         public IEnumerable<string> GetNonZeroCounts()
         {
@@ -206,6 +215,8 @@ namespace SysBot.Pokemon
                 yield return $"Ball Swaps: {CompletedBallSwaps}";
             if (CompletedEVSwaps != 0)
                 yield return $"EV Swaps: {CompletedEVSwaps}";
+            if (CompletedOTSwaps != 0)
+                yield return $"OT Swaps: {CompletedOTSwaps}";
         }
     }
 }

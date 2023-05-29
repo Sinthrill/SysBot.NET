@@ -40,6 +40,9 @@ namespace SysBot.Pokemon
         [Category(Clone), Description("Held item used to trigger Genning.")]
         public LegalHeld9 GennedSwapItem { get; set; } = LegalHeld9.FreshWater;
 
+        [Category(Clone), Description("Held item used to trigger OT swaps.")]
+        public LegalHeld9 OTSwapItem { get; set; } = LegalHeld9.BurnHeal;
+
         [Category(Clone), Description("Counter for genned set logging.")]
         public int SetLogCount
         {
