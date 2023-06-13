@@ -365,8 +365,8 @@ namespace SysBot.Pokemon.Discord
 
             foreach (var ID in IDs)
             {
-                PokeRoutineExecutorBase.PreviousUsers.RemoveAll(ID);
-                PokeRoutineExecutorBase.PreviousUsersDistribution.RemoveAll(ID);
+                PokeRoutineExecutorBase.PreviousUsers.RemoveAllNID(ID);
+                PokeRoutineExecutorBase.PreviousUsersDistribution.RemoveAllNID(ID);
             }
             await ReplyAsync("Done.").ConfigureAwait(false);
         }
