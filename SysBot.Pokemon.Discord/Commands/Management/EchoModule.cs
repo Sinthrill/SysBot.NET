@@ -111,7 +111,7 @@ namespace SysBot.Pokemon.Discord
             return Channels.TryGetValue(cid, out _);
         }
 
-        public static bool IsEchoEmbedChannel(ISocketMessageChannel c)
+        public static bool IsEmbedChannel(ISocketMessageChannel c)
         {
             var cid = c.Id;
             return ChannelsEmbed.TryGetValue(cid, out _);
@@ -134,17 +134,25 @@ namespace SysBot.Pokemon.Discord
         public async Task ClearEchosAsync()
         {
             var id = Context.Channel.Id;
-            if (!Channels.TryGetValue(id, out var echo))
+            bool isEcho = Channels.TryGetValue(id, out var echo);
+            bool isEmbed = ChannelsEmbed.TryGetValue(id, out var embedEcho);
+            if (!isEcho && !isEmbed)
             {
                 await ReplyAsync("Not echoing in this channel.").ConfigureAwait(false);
                 return;
             }
-            EchoUtil.Forwarders.Remove(echo.Action);
-            EchoUtil.ForwardersEmbed.Remove(echo.Action);
-            Channels.Remove(Context.Channel.Id);
-            ChannelsEmbed.Remove(Context.Channel.Id);
-            SysCordSettings.Settings.EchoChannels.RemoveAll(z => z.ID == id);
-            SysCordSettings.Settings.EchoEmbedChannels.RemoveAll(z => z.ID == id);
+            if (echo != null)
+            {
+                EchoUtil.Forwarders.Remove(echo.Action);
+                Channels.Remove(Context.Channel.Id);
+                SysCordSettings.Settings.EchoChannels.RemoveAll(z => z.ID == id);
+            }
+            if (embedEcho != null)
+            {
+                EchoUtil.ForwardersEmbed.Remove(embedEcho.Action);
+                ChannelsEmbed.Remove(Context.Channel.Id);
+                SysCordSettings.Settings.EchoEmbedChannels.RemoveAll(z => z.ID == id);
+            }
             await ReplyAsync($"Echoes cleared from channel: {Context.Channel.Name}").ConfigureAwait(false);
         }
 

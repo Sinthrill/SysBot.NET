@@ -140,7 +140,7 @@ namespace SysBot.Pokemon
             var user = poke.Trainer;
             bool isDistribution = false;
             string msg = "";
-            if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
+            if (poke.Type == PokeTradeType.Random || (poke.Type == PokeTradeType.Clone && Config.InitialRoutine == PokeRoutineType.FlexTrade))
                 isDistribution = true;
             var useridmsg = isDistribution ? "" : $" ({user.ID})";
             var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
@@ -175,7 +175,7 @@ namespace SysBot.Pokemon
             if (previous != null)
             {
                 var delta = DateTime.Now - previous.Time; // Time that has passed since last trade.
-                var coolDelta = DateTime.Now - DateTime.ParseExact(AbuseSettings.CooldownUpdate, "yyyy.MM.dd - HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+                var coolDelta = DateTime.Now - DateTime.ParseExact(AbuseSettings.CooldownUpdate, "yyyy.MM.dd - HH:mm:ss", CultureInfo.InvariantCulture);
                 Log($"Last traded with {user.TrainerName} {delta.TotalMinutes:F1} minutes ago (OT: {TrainerName}).");
 
                 // Allows setting a cooldown for repeat trades. If the same user is encountered within the cooldown period for the same trade type, the user is warned and the trade will be ignored.
@@ -184,7 +184,7 @@ namespace SysBot.Pokemon
                 {
                     var wait = TimeSpan.FromMinutes(cd) - delta;
                     poke.Notifier.SendNotification(bot, poke, $"You are still on trade cooldown, and cannot trade for another {wait.TotalMinutes:F1} minute(s).");
-                    var msg = $"Found {user.TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
+                    msg = $"Found {user.TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
                     if (AbuseSettings.EchoNintendoOnlineIDCooldown)
                         msg += $"\nID: {TrainerNID}";
                     if (!string.IsNullOrWhiteSpace(AbuseSettings.CooldownAbuseEchoMention))
@@ -225,7 +225,7 @@ namespace SysBot.Pokemon
                         quit = true;
                     }
 
-                    var msg = $"Found {user.TrainerName}{useridmsg} using multiple accounts.\nPreviously traded with {previous.Name} ({previous.RemoteID}) {delta.TotalMinutes:F1} minutes ago on OT: {TrainerName}.";
+                    msg = $"Found {user.TrainerName}{useridmsg} using multiple accounts.\nPreviously traded with {previous.Name} ({previous.RemoteID}) {delta.TotalMinutes:F1} minutes ago on OT: {TrainerName}.";
                     if (AbuseSettings.EchoNintendoOnlineIDMulti)
                         msg += $"\nID: {TrainerNID}";
                     if (!string.IsNullOrWhiteSpace(AbuseSettings.MultiAbuseEchoMention))
@@ -255,7 +255,7 @@ namespace SysBot.Pokemon
                         quit = true;
                     }
 
-                    var msg = $"Found {user.TrainerName}{useridmsg} sending to multiple in-game players. Previous OT: {previous_remote.Name}, Current OT: {TrainerName}";
+                    msg = $"Found {user.TrainerName}{useridmsg} sending to multiple in-game players. Previous OT: {previous_remote.Name}, Current OT: {TrainerName}";
                     if (AbuseSettings.EchoNintendoOnlineIDMultiRecipients)
                         msg += $"\nID: {TrainerNID}";
                     if (!string.IsNullOrWhiteSpace(AbuseSettings.MultiRecipientEchoMention))
@@ -270,13 +270,15 @@ namespace SysBot.Pokemon
             return PokeTradeResult.Success;
         }
 
-        public static void LogSuccessfulTrades(PokeTradeDetail<T> poke, ulong TrainerNID, string TrainerName)
+        public void LogSuccessfulTrades(PokeTradeDetail<T> poke, ulong TrainerNID, string TrainerName)
         {
             // All users who traded, tracked by whether it was a targeted trade or distribution.
-            if (poke.Type == PokeTradeType.Random)
+            if (poke.Type == PokeTradeType.Random || (poke.Type == PokeTradeType.Clone && Config.InitialRoutine == PokeRoutineType.FlexTrade))
                 PreviousUsersDistribution.TryRegister(TrainerNID, TrainerName);
             else
                 PreviousUsers.TryRegister(TrainerNID, TrainerName, poke.Trainer.ID);
+
+            _ = UserCooldowns.TryInsert(TrainerNID, TrainerName, true);
         }
 
         private void CheckExpiration(ulong trainerNID, TradeAbuseSettings AbuseSettings)

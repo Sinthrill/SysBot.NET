@@ -391,7 +391,7 @@ namespace SysBot.Pokemon
             var tradePartner = await GetTradePartnerInfo(token).ConfigureAwait(false);
             var trainerNID = await GetTradePartnerNID(TradePartnerNIDOffset, token).ConfigureAwait(false);
             var trainer = new PartnerDataHolderSV(trainerNID, tradePartner);
-            RecordUtil<PokeTradeBot>.Record($"Initiating\t{trainerNID:X16}\t{tradePartner.TrainerName}\t{poke.Trainer.TrainerName}\t{poke.Trainer.ID}\t{poke.ID}\t{toSend.EncryptionConstant:X8}");
+            RecordUtil<PokeTradeBotSWSH>.Record($"Initiating\t{trainerNID:X16}\t{tradePartner.TrainerName}\t{poke.Trainer.TrainerName}\t{poke.Trainer.ID}\t{poke.ID}\t{toSend.EncryptionConstant:X8}");
             Log($"Found Link Trade partner: {tradePartner.TrainerName}-{tradePartner.TID7} (ID: {trainerNID})");
 
             var partnerCheck = await CheckPartnerReputation(this, poke, trainerNID, tradePartner.TrainerName, AbuseSettings, token);
@@ -406,7 +406,6 @@ namespace SysBot.Pokemon
             if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
                 isDistribution = true;
             var list = isDistribution ? PreviousUsersDistribution : PreviousUsers;
-            var listCool = UserCooldowns;
 
             poke.SendNotification(this, $"Found Link Trade partner: {tradePartner.TrainerName}. Waiting for a Pokémon...");
 
@@ -489,13 +488,11 @@ namespace SysBot.Pokemon
                 // Only log if we completed the trade.
                 UpdateCountsAndExport(poke, received, toSend);
 
-            // Log for Trade Abuse tracking.
-            LogSuccessfulTrades(poke, trainerNID, tradePartner.TrainerName);
 
             // Sometimes they offered another mon, so store that immediately upon leaving Union Room.
             lastOffered = await SwitchConnection.ReadBytesAbsoluteAsync(TradePartnerOfferedOffset, 8, token).ConfigureAwait(false);
 
-                if (poke.Type == PokeTradeType.Random || poke.Type == PokeTradeType.Clone)
+                if (poke.Type == PokeTradeType.Random || (poke.Type == PokeTradeType.Clone && Config.InitialRoutine == PokeRoutineType.FlexTrade))
                 {
                     multiTrade++;
                 } else
@@ -509,8 +506,8 @@ namespace SysBot.Pokemon
                 }
             }
 
-            list.TryRegister(trainerNID, tradePartner.TrainerName);
-            _ = listCool.TryInsert(trainerNID, tradePartner.TrainerName, true);
+            // Log for Trade Abuse tracking.
+            LogSuccessfulTrades(poke, trainerNID, tradePartner.TrainerName);
 
             await ExitTradeToPortal(false, token).ConfigureAwait(false);
             return PokeTradeResult.Success;
@@ -1117,6 +1114,10 @@ namespace SysBot.Pokemon
         private (PK9 clone, PokeTradeResult check) HandleBallSwap(string ball, PK9 clone)
         {
             Ball b;
+
+            if (clone.Version != 50 && clone.Version != 51)
+                return (clone, PokeTradeResult.TrainerRequestBad);
+
             //Handle items with Ball as second word that aren't actually Balls
             if (ball is "Smoke" or "Iron" or "Light")
                 return (clone, PokeTradeResult.Success);
@@ -1439,6 +1440,12 @@ namespace SysBot.Pokemon
                 newID32 = (newSID << 16) | newTID;
             }
 
+            ushort[] genMoves = new ushort[] { 0, 0, 0, 0 };
+            GameVersion[] genVersions = new GameVersion[] { GameVersion.SL, GameVersion.VL };
+            PK9 genPKM = new PK9 { Species = species, Form = form, Gender = reqGender };
+            var encList = EncounterMovesetGenerator.GenerateEncounters(genPKM, genMoves, genVersions);
+            bool hasGen9 = encList != null;
+
             // Generate basic Showdown Set information
             string showdownSet = "";
             showdownSet += specName;
@@ -1467,8 +1474,9 @@ namespace SysBot.Pokemon
             showdownSet += boxVersionCheck;
             if (!staticScale)
                 showdownSet += scaleSet;
-            showdownSet += "~=Generation=9\r\n";
-            if (!raidOnly)
+            if (hasGen9)
+                showdownSet += "~=Generation=9\r\n";
+            if (!raidOnly && hasGen9)
                 showdownSet += "~!Location=30024\r\n";
             showdownSet += ".HyperTrainFlags=0\r\n";
             if (lowLevel)
@@ -1646,8 +1654,6 @@ namespace SysBot.Pokemon
             }
 
             var clone = offered.Clone();
-            if (Hub.Config.Legality.ResetHOMETracker)
-                clone.Tracker = 0;
 
             CloneSwapInfoList swapInfos = GetCloneSwapInfo(clone);
             if (swapInfos.List.Count > 1)
@@ -1671,7 +1677,7 @@ namespace SysBot.Pokemon
                 Log("Trade partner did not change their Pokémon.");
                 return (offered, PokeTradeResult.TrainerTooSlow);
             }
-
+            
             swapInfos = CheckTrashmon(pk2, swapInfos);
             var request = "Clone request finalized. Requests are as follows:\n";
             var requests = swapInfos.Summarize();
@@ -1736,6 +1742,11 @@ namespace SysBot.Pokemon
                 Log($"Resulting Pokemon is illegal! Aborting trade.");
                 return (clone, PokeTradeResult.IllegalTrade);
             }
+
+            bool isResetTracker = (clone.Version == 50 || clone.Version == 51) && swapInfos.List.Count > 0;
+
+            if (Hub.Config.Legality.ResetHOMETracker && isResetTracker)
+                clone.Tracker = 0;
 
             clone.RefreshChecksum();
 
