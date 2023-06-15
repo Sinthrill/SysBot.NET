@@ -1345,7 +1345,7 @@ namespace SysBot.Pokemon
             if (natureIndex > 24)
                 natureIndex = (ushort)rnd.Next(0, 24);
             nature = GameInfo.GetStrings(1).Natures[natureIndex];
-            if (Enum.IsDefined(typeof(Ball), (byte)(ballIndex)))
+            if (Enum.IsDefined(typeof(Ball), (byte)ballIndex))
                 ball = ((Ball)ballIndex).ToString();
             else
                 return (offered, PokeTradeResult.TrainerRequestBad);
@@ -1442,9 +1442,8 @@ namespace SysBot.Pokemon
 
             ushort[] genMoves = new ushort[] { 0, 0, 0, 0 };
             GameVersion[] genVersions = new GameVersion[] { GameVersion.SL, GameVersion.VL };
-            PK9 genPKM = new PK9 { Species = species, Form = form, Gender = reqGender };
-            var encList = EncounterMovesetGenerator.GenerateEncounters(genPKM, genMoves, genVersions);
-            bool hasGen9 = encList != null;
+            PK9 genPKM = new() { Species = species, Form = form, Gender = reqGender };
+            bool hasGen9 = EncounterMovesetGenerator.GenerateEncounters(genPKM, genMoves, genVersions).Any(e => e.Context == EntityContext.Gen9);
 
             // Generate basic Showdown Set information
             string showdownSet = "";
@@ -1460,24 +1459,28 @@ namespace SysBot.Pokemon
             showdownSet += nature + " Nature\r\n";
             if (ReqIVs != "")
                 showdownSet += "IVs: " + ReqIVs + "\r\n";
-            showdownSet += "Language: " + Enum.GetName(typeof(LanguageID), partner.Language) + "\r\n";
-            showdownSet += "OT: " + partner.TrainerName + "\r\n";
-            showdownSet += randID ? "TID: " + (newID32 % 1000000) + "\r\n" : "TID: " + partner.TID7 + "\r\n";
-            showdownSet += randID ? "SID: " + (newID32 / 1000000) + "\r\n" : "SID: " + partner.SID7 + "\r\n";
-            showdownSet += "OTGender: " + genderOTSet + "\r\n";
-            string boxVersionCheck = species switch
-            {
-                (ushort)Species.Koraidon => ".Version=50\r\n",
-                (ushort)Species.Miraidon => ".Version=51\r\n",
-                _ => ".Version=" + partner.Game + "\r\n",
-            };
-            showdownSet += boxVersionCheck;
-            if (!staticScale)
-                showdownSet += scaleSet;
             if (hasGen9)
-                showdownSet += "~=Generation=9\r\n";
-            if (!raidOnly && hasGen9)
-                showdownSet += "~!Location=30024\r\n";
+            {
+                showdownSet += "Language: " + Enum.GetName(typeof(LanguageID), partner.Language) + "\r\n";
+                showdownSet += "OT: " + partner.TrainerName + "\r\n";
+                showdownSet += randID ? "TID: " + (newID32 % 1000000) + "\r\n" : "TID: " + partner.TID7 + "\r\n";
+                showdownSet += randID ? "SID: " + (newID32 / 1000000) + "\r\n" : "SID: " + partner.SID7 + "\r\n";
+                showdownSet += "OTGender: " + genderOTSet + "\r\n";
+                string boxVersionCheck = species switch
+                {
+                    (ushort)Species.Koraidon => ".Version=50\r\n",
+                    (ushort)Species.Miraidon => ".Version=51\r\n",
+                    _ => ".Version=" + partner.Game + "\r\n",
+                };
+
+                showdownSet += boxVersionCheck;
+                if (!staticScale)
+                    showdownSet += scaleSet;
+                if (hasGen9)
+                    showdownSet += "~=Generation=9\r\n";
+                if (!raidOnly)
+                    showdownSet += "~!Location=30024\r\n";
+            }
             showdownSet += ".HyperTrainFlags=0\r\n";
             if (lowLevel)
                 showdownSet += ".CurrentLevel=$suggest";
@@ -1528,6 +1531,14 @@ namespace SysBot.Pokemon
             pk.HT_Friendship = 50;
             pk.RefreshChecksum();
             return (pk, PokeTradeResult.Success);
+        }
+
+        public (PK9 pk, PokeTradeResult result) HandleGennedSwap(string nickname, ITrainerInfo info)
+        {
+            PK9 rough = new() { Species = 25, Language = 2, Nickname = nickname, IsNicknamed = true };
+            PartnerDataHolderSV partner = new(info);
+            (PK9 pk, PokeTradeResult result) = HandleGennedSwap(rough, partner);
+            return (pk, result);
         }
 
         private static (ushort species, byte form, ushort nature, ushort tera, ushort ball, char scaleChar, bool lowLevel, bool shiny, char genderChar, int abiIndex, PokeTradeResult check) ParseSetReq(long input)

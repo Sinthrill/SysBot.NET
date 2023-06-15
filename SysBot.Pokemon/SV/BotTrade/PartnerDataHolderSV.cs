@@ -4,8 +4,8 @@ namespace SysBot.Pokemon
 {
     public class PartnerDataHolderSV
     {
-        public readonly ulong TrainerOnlineID;
-        public readonly TradePartnerSV partner;
+        public readonly ulong? TrainerOnlineID;
+        public readonly TradePartnerSV? partner;
         public readonly string TID7;
         public readonly string SID7;
         public readonly string TrainerName;
@@ -20,6 +20,16 @@ namespace SysBot.Pokemon
             TID7 = info.TID7;
             SID7 = info.SID7;
             TrainerName = info.TrainerName;
+            Game = info.Game;
+            Gender = info.Gender;
+            Language = info.Language;
+        }
+
+        public PartnerDataHolderSV(ITrainerInfo info)
+        {
+            TID7 = info.GetTrainerTID7().ToString();
+            SID7 = info.GetTrainerSID7().ToString();
+            TrainerName = info.OT;
             Game = info.Game;
             Gender = info.Gender;
             Language = info.Language;

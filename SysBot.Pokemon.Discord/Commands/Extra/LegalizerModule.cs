@@ -1,5 +1,7 @@
-﻿using Discord.Commands;
+﻿using Discord;
+using Discord.Commands;
 using PKHeX.Core;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Discord
@@ -29,6 +31,13 @@ namespace SysBot.Pokemon.Discord
         public async Task ConvertShowdown([Remainder][Summary("Showdown Set")] string content)
         {
             await Context.Channel.ReplyWithLegalizedSetAsync<T>(content).ConfigureAwait(false);
+        }
+
+        [Command("generate")]
+        [Summary("Tries to generate a nickname from website to pkm data.")]
+        public async Task GenerateNickname([Remainder][Summary("Nickname")] string content)
+        {
+            await Context.Channel.ReplyWithGeneratedPKMAsync<T>(content).ConfigureAwait(false);
         }
     }
 }

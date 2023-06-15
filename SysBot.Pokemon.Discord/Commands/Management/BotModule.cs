@@ -21,7 +21,7 @@ namespace SysBot.Pokemon.Discord
                 await ReplyAsync("No bots configured.").ConfigureAwait(false);
                 return;
             }
-
+            
             var summaries = bots.Select(GetDetailedSummary);
             var lines = string.Join(Environment.NewLine, summaries);
             await ReplyAsync(Format.Code(lines)).ConfigureAwait(false);
@@ -43,7 +43,7 @@ namespace SysBot.Pokemon.Discord
                 await ReplyAsync($"No bot has that IP address ({ip}).").ConfigureAwait(false);
                 return;
             }
-
+            
             bot.Start();
             await Context.Channel.EchoAndReply($"The bot at {ip} ({bot.Bot.Connection.Label}) has been commanded to Start.").ConfigureAwait(false);
         }

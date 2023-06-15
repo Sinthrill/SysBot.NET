@@ -3,6 +3,7 @@ using Discord.WebSocket;
 using PKHeX.Core;
 using SysBot.Base;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Discord
@@ -87,6 +88,28 @@ namespace SysBot.Pokemon.Discord
 
             var msg = $"Here's your legalized PKM for {download.SanitizedFileName}!\n{ReusableActions.GetFormattedShowdownText(legal)}";
             await channel.SendPKMAsync(legal, msg).ConfigureAwait(false);
+        }
+
+        public static async Task ReplyWithGeneratedPKMAsync<T>(this ISocketMessageChannel channel, string content) where T : PKM, new()
+        {
+            var me = SysCord<T>.Runner;
+            var bot = me.Bots.Select(z => z.Bot).OfType<PokeTradeBotSV>().First();
+            if (bot is null)
+            {
+                await channel.SendMessageAsync("No SV bots found running, unable to test genning.").ConfigureAwait(false);
+                return;
+            }
+            content = ReusableActions.StripCodeBlock(content);
+            var sav = AutoLegalityWrapper.GetTrainerInfo(9);
+            (PK9 pk, PokeTradeResult result) = bot.HandleGennedSwap(content, sav);
+            if (result != PokeTradeResult.Success)
+            {
+                await channel.SendMessageAsync("Resulting generated mon is illegal.").ConfigureAwait(false);
+                return;
+            }
+
+            var msg = $"Here's your generated PKM for nickname:{content}";
+            await channel.SendPKMAsync(pk, msg).ConfigureAwait(false);
         }
     }
 }
