@@ -1323,7 +1323,7 @@ namespace SysBot.Pokemon
         private (PK9 pk, PokeTradeResult check) HandleGennedSwap(PK9 offered, PartnerDataHolderSV partner)
         {
             string nature, abiName, ball, formName = "";
-            bool hasForm = false;
+            bool hasForm = false, hasGen9 = false, onlyPLA = false;
             PokeTradeResult update;
             var s = GameInfo.Strings;
             string genInput = offered.Nickname[..6];
@@ -1393,10 +1393,6 @@ namespace SysBot.Pokemon
 
             MoveType tera = (MoveType)(byte)teraIndex;
 
-            var genLog = lowLevel ? $"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature at lowest legal level." : $"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature.";
-            Log(genLog);
-            Log($"Appearing caught in {ball} Ball with Tera Type {tera}.");
-
             // Handle specific IV requests
             string ReqIVs = "";
             string[] ivTitles = { "HP", "Atk", "Def", "Spe", "SpA", "SpD" };
@@ -1440,10 +1436,34 @@ namespace SysBot.Pokemon
                 newID32 = (newSID << 16) | newTID;
             }
 
+            //Check for Gen9 and PLA encounters to account for OT info and Ball later on
             ushort[] genMoves = new ushort[] { 0, 0, 0, 0 };
             GameVersion[] genVersions = new GameVersion[] { GameVersion.SL, GameVersion.VL };
             PK9 genPKM = new() { Species = species, Form = form, Gender = reqGender };
-            bool hasGen9 = EncounterMovesetGenerator.GenerateEncounters(genPKM, genMoves, genVersions).Any(e => e.Context == EntityContext.Gen9);
+            var encTable = EncounterMovesetGenerator.GenerateEncounters(genPKM, genMoves, genVersions);
+            if (encTable.Any())
+            {
+                hasGen9 = encTable.Any(e => e.Version == GameVersion.SV || e.Version == GameVersion.VL);
+                onlyPLA = encTable.All(e => e.Version == GameVersion.PLA);
+            }
+
+            if (onlyPLA)
+            {
+                if (ball != "Poke" && ball != "Great" && ball != "Ultra")
+                {
+                    string[] ballList = { "Poke", "Great", "Ultra" };
+                    ball = ballList[rnd.Next(ballList.Length)];
+                }
+                ball = "LA" + ball;
+            }
+
+            //Check for Vivi PokeBall cause somehow the above doesn't like it
+            if (species == (ushort)Species.Vivillon && form == 19)
+                hasGen9 = false;
+
+            var genLog = lowLevel ? $"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature at lowest legal level." : $"Request is for {shinyLog}{specName}{formLog} ({genderChar}) {scaleLog} with {abiName} and {nature} Nature.";
+            Log(genLog);
+            Log($"Appearing caught in {ball} Ball with Tera Type {tera}.");
 
             // Generate basic Showdown Set information
             string showdownSet = "";
@@ -1537,6 +1557,7 @@ namespace SysBot.Pokemon
         {
             PK9 rough = new() { Species = 25, Language = 2, Nickname = nickname, IsNicknamed = true };
             PartnerDataHolderSV partner = new(info);
+            Log($"Attempting to generate via Discord using nickname: {nickname}");
             (PK9 pk, PokeTradeResult result) = HandleGennedSwap(rough, partner);
             return (pk, result);
         }
