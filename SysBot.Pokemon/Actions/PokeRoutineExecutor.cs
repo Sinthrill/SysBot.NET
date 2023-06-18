@@ -184,16 +184,17 @@ namespace SysBot.Pokemon
                 {
                     var wait = TimeSpan.FromMinutes(cd) - delta;
                     poke.Notifier.SendNotification(bot, poke, $"You are still on trade cooldown, and cannot trade for another {wait.TotalMinutes:F1} minute(s).");
-                    msg = $"Found {user.TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
-                    if (AbuseSettings.EchoNintendoOnlineIDCooldown)
-                        msg += $"\nID: {TrainerNID}";
-                    if (!string.IsNullOrWhiteSpace(AbuseSettings.CooldownAbuseEchoMention))
-                        msg = $"{AbuseSettings.CooldownAbuseEchoMention} {msg}";
-                    EchoUtil.Echo(msg);
+                    msg = $"Found {TrainerName}{useridmsg} ignoring the {cd} minute trade cooldown. Last encountered {delta.TotalMinutes:F1} minutes ago.";
+                    _ = isDistribution ? list.TryRegister(TrainerNID, TrainerName) : list.TryRegister(TrainerNID, TrainerName, poke.Trainer.ID);
                     if (AbuseSettings.AutoBanCooldown && TimeSpan.FromMinutes(60) < coolDelta)
                     {
                         attempts = listCool.TryInsert(TrainerNID, TrainerName);
-                        Log($"Connection during cooldown number {attempts} for {TrainerName}.");
+                        msg += $"\nConnection during cooldown number {attempts} for {TrainerName}.";
+                        if (AbuseSettings.EchoNintendoOnlineIDCooldown)
+                            msg += $"\nID: {TrainerNID}";
+                        if (!string.IsNullOrWhiteSpace(AbuseSettings.CooldownAbuseEchoMention))
+                            msg = $"{AbuseSettings.CooldownAbuseEchoMention} {msg}";
+                        EchoUtil.Echo(msg);
                         if (attempts >= AbuseSettings.RepeatConnections)
                         {
                             DateTime expires = DateTime.Now.AddDays(2);

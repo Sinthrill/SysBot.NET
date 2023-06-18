@@ -229,7 +229,7 @@ namespace SysBot.Pokemon
             detail.IsProcessing = false;
             if (detail.Type == PokeTradeType.Clone)
                 EchoCloneTradeResult(detail, result);
-            if (result.ShouldAttemptRetry() && detail.Type != PokeTradeType.Random && !detail.IsRetry)
+            if (result.ShouldAttemptRetry() && detail.Type != PokeTradeType.Random && !detail.IsRetry && !(detail.Type == PokeTradeType.Clone && Config.InitialRoutine == PokeRoutineType.FlexTrade && Hub.Config.Clone.CloneWhileIdle))
             {
                 detail.IsRetry = true;
                 Hub.Queues.Enqueue(type, detail, Math.Min(priority, PokeTradePriorities.Tier2));
